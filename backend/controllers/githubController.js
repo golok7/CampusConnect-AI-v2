@@ -1,0 +1,158 @@
+const User = require("../models/User");
+const { fetchGithubData } = require("../services/githubService");
+const { AI_FAMILY, TOP_N, AI_MAX, DOMAIN_INTEREST_MAP } = require("../constants/domains");
+
+const GITHUB_USERNAME_REGEX = /^[a-zA-Z0-9-]{1,39}$/;
+
+const TOP_N_DOMAINS = TOP_N;
+const AI_FAMILY_MAX = AI_MAX;
+
+/**
+ * Selects the top TOP_N_DOMAINS from allSortedDomains applying diversity.
+ * allSortedDomains — [[domain, score], ...] sorted descending.
+ * Returns an array of domain name strings (up to TOP_N_DOMAINS).
+ */
+function selectDiverseTopDomains(allSortedDomains) {
+  const qualifying = allSortedDomains.filter(([, score]) => score > 0);
+
+  const selected  = [];
+  const aiOverflow = [];   // AI domains bumped by the cap
+  let aiCount = 0;
+
+  for (const [domain] of qualifying) {
+    if (selected.length >= TOP_N_DOMAINS) break;
+
+    if (AI_FAMILY.has(domain)) {
+      if (aiCount >= AI_FAMILY_MAX) { aiOverflow.push(domain); continue; }
+      aiCount++;
+    }
+
+    selected.push(domain);
+  }
+
+  // If slots remain and only AI domains are left, fill them (pure AI researcher).
+  if (selected.length < TOP_N_DOMAINS && aiOverflow.length > 0) {
+    selected.push(...aiOverflow.slice(0, TOP_N_DOMAINS - selected.length));
+  }
+
+  return selected;
+}
+
+// ── Controller ────────────────────────────────────────────────────────────────
+exports.getGithubData = async (req, res) => {
+  try {
+    const { username } = req.body;
+
+    if (!username) {
+      return res.status(400).json({ message: "GitHub username is required" });
+    }
+    if (!GITHUB_USERNAME_REGEX.test(username)) {
+      return res.status(400).json({ message: "Invalid GitHub username format" });
+    }
+
+    // ── Fetch + score from GitHub (and Voyage AI if key is set) ──
+    const data = await fetchGithubData(username);
+
+    if (!data.totalRepos || data.totalRepos === 0) {
+      return res.status(400).json({
+        message: "This GitHub account has no public repositories yet.",
+      });
+    }
+
+    // ── Build diverse top 5 domain names ──
+    const allSortedDomains     = Object.entries(data.skills).sort((a, b) => b[1] - a[1]);
+    const diverseTopDomainNames = selectDiverseTopDomains(allSortedDomains);
+
+    // ── Build rich topDomains array with scores and per-domain metrics ──
+    const richTopDomains = diverseTopDomainNames.map(domain => ({
+      domain,
+      score:   data.skills[domain] || 0,
+      metrics: data.domainMetrics?.[domain] || { repos: 0, commits: 0, stars: 0, activeDays: 0 },
+    }));
+
+    // ── Seed interests from top domain names ──
+    // Re-seeded on every fetch so interests always reflect current work.
+    const seededInterests = diverseTopDomainNames
+      .map(d => DOMAIN_INTEREST_MAP[d])
+      .filter(Boolean);
+
+    // ── Build raw skills object ──
+    const skills = {
+      languages:  data.rawSkills?.languages  || data.languages || [],
+      frameworks: data.rawSkills?.frameworks || [],
+      libraries:  data.rawSkills?.libraries  || [],
+      databases:  data.rawSkills?.databases  || [],
+      tools:      data.rawSkills?.tools      || [],
+    };
+
+    const normalizedSkills = [...new Set([
+      ...skills.languages,
+      ...skills.frameworks,
+      ...skills.libraries,
+      ...skills.databases,
+      ...skills.tools,
+    ].map(s => s.toLowerCase().trim()).filter(Boolean))];
+
+    const repoSummaries = data.repoSummaries || [];
+
+    // ── Persist to DB ──
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      {
+        githubUsername:  username,
+        topDomains:      richTopDomains,
+        domainScores:    data.skills || {},
+        skills,
+        normalizedSkills,
+        interests:       seededInterests,
+        activityScore:   data.activityScore,
+        githubData: {
+          languages:       data.languages,
+          repos:           data.repos,
+          stars:           data.stars,
+          totalRepos:      data.totalRepos,
+          processedRepos:  data.processedRepos,
+          totalCommits:    data.totalCommits || 0,
+          repoTypeCounts:  data.repoTypeCounts,
+          repoSummaries,
+          activityScore:   data.activityScore,
+          scoringMode:     data.embeddingMode,
+          semanticVersion: "v1",
+          domainScores:    data.skills || {},
+        },
+      },
+      { returnDocument: "after" }
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const safeUser = user.toJSON();
+    delete safeUser.password;
+
+    const response = { ...safeUser };
+    if (process.env.NODE_ENV !== "production" || process.env.DEBUG_SEMANTICS === "true") {
+      response.debug = {
+        githubUsername:    username,
+        finalDomainScores: data.skills || {},
+        repos:             data.repoDebug || [],
+      };
+    }
+    return res.json(response);
+
+  } catch (err) {
+    console.error("GitHub fetch error:", err.message);
+
+    if (err.message?.includes("rate limit")) {
+      return res.status(429).json({
+        message: "GitHub API rate limit hit. Try again in a few minutes, or add a GITHUB_TOKEN.",
+      });
+    }
+    if (err.message?.includes("VOYAGE_API_KEY")) {
+      console.warn("Voyage AI key missing — scoring ran in keyword-only mode.");
+    }
+
+    return res.status(500).json({ message: err.message || "GitHub fetch failed" });
+  }
+};

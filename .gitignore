@@ -1,0 +1,5 @@
+.claude/
+cache/
+node_modules/
+.env
+backend/.env
