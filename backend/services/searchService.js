@@ -216,15 +216,22 @@ function buildWhyMatched(user, requestedDomains, requestedSkills, skillInfo) {
     .sort((a, b) => (b.score || 0) - (a.score || 0))
     .map(d => d.domain);
 
-  // ── 2. Matched skills (query-scoped only — no domain-unconstrained filler) ──
-  //
-  // DESIGN DECISION: We only show skills that were explicitly in the query AND
-  // confirmed present on the candidate. We do NOT fill with the candidate's
-  // globally highest-weight skills — that caused semantic leakage where
-  // three.js / langchain appeared in cybersecurity search results.
-  //
-  // An honest short list is better than a misleading padded list.
+  // ── 2. Matched skills (query-scoped, max 5) ──
+  //    Fill any remaining slots with highest-weight user skills not in the query.
+  const matchedSet   = new Set(skillInfo.matched);
   const matchedSkills = [...skillInfo.matched];
+
+  if (matchedSkills.length < 5) {
+    const filler = (user.normalizedSkills || [])
+      .filter(s => !matchedSet.has(s))
+      .map(s => ({ skill: s, weight: SKILL_WEIGHTS[s] ?? 1.0 }))
+      .sort((a, b) => b.weight - a.weight);
+
+    for (const { skill } of filler) {
+      if (matchedSkills.length >= 5) break;
+      matchedSkills.push(skill);
+    }
+  }
 
   // ── 3. Semantic summary (template — no LLM, no repo lookup) ──
   const topTwo = (user.topDomains || [])

@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "5000:5000"
+    environment:
+      - MONGO_URI=${MONGO_URI}
+      - JWT_SECRET=${JWT_SECRET}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - VOYAGE_API_KEY=${VOYAGE_API_KEY}
+      - RESUME_PARSER_URL=http://ai-service:8000
+      - PORT=5000
+    depends_on:
+      - ai-service
+    networks:
+      - campus-net
+
+  ai-service:
+    build: ./ai-service
+    expose:
+      - "8000"
+    environment:
+      - NODE_BACKEND_URL=http://backend:5000
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    networks:
+      - campus-net
+
+networks:
+  campus-net:
+    driver: bridge
