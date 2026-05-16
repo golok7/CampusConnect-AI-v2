@@ -20,8 +20,12 @@ const README_PREFER_SECTIONS = [
   "backend", "services", "infrastructure", "runtime",
 ];
 
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function match(text, keyword) {
-  return new RegExp(`\\b${keyword}\\b`, "i").test(text);
+  return new RegExp(`\\b${escapeRegex(keyword)}\\b`, "i").test(text);
 }
 
 function cleanText(text, limit = 2000) {
@@ -112,7 +116,7 @@ function sanitizeForSummary(repo, readme, deps, isMlResearchRepo) {
       "vue", "angular", "node", "svelte",
     ];
     for (const pkg of webNoise) {
-      cleanDeps = cleanDeps.replace(new RegExp(`\\b${pkg}\\b`, "gi"), " ");
+      cleanDeps = cleanDeps.replace(new RegExp(`\\b${escapeRegex(pkg)}\\b`, "gi"), " ");
     }
   }
 
@@ -138,6 +142,7 @@ function buildSemanticSummary(repo, readmeText) {
 }
 
 module.exports = {
+  escapeRegex,
   match,
   cleanText,
   isBoilerplateDeps,

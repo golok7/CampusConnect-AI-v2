@@ -3,11 +3,21 @@ const DOMAIN_RULES = {
   ai_ml: [
     "neural", "classification", "detection", "vision", "nlp",
     "machine learning", "deep learning", "cnn", "rnn",
-    "resnet", "yolo", "fine-tuning", "finetuning", "fine tune",
+    "resnet", "yolo", "fine-tuning", "finetuning", "fine tune", "fine-tuned", "fine tuned",
     "training dataset", "ml dataset", "training data", "model training", "huggingface",
     "computer vision", "image segmentation", "object detection",
     "natural language processing", "speech recognition",
     "siamese network", "encoder decoder",
+    // NLP / Transformer-specific
+    "transformer", "bert", "roberta", "embedding", "embeddings", "sentence embedding",
+    "semantic embedding", "text classification", "sentiment analysis",
+    "named entity recognition", "ner", "question answering",
+    "summarization", "text summarization", "abstractive summarization",
+    "token classification", "sequence labeling", "semantic similarity",
+    "language model", "language modeling", "multilingual model",
+    "intent classification", "intent detection", "entity extraction",
+    // General ML signals
+    "accuracy", "validation accuracy", "training accuracy", "map score",
     "time series", "forecasting", "anomaly detection",
     // Applied ML — prediction, serving, recommendation, recognition
     "prediction", "ml prediction", "model prediction", "prediction api",
@@ -166,24 +176,75 @@ const DOMAIN_RULES = {
     "self-healing", "auto-recovery", "failover",
   ],
   database: [
-    "mongo", "mysql", "postgres", "redis", "database", "sql",
-    "firebase", "supabase",
+    "mongo", "mysql", "postgres", "redis", "firebase", "supabase",
     "cassandra", "elasticsearch", "sqlite", "dynamodb", "clickhouse",
-    "orm", "query", "schema", "migration",
+    "orm", "database schema", "database design", "database management",
+    "sql query", "database query", "query optimization",
+    "data migration", "schema migration", "db migration",
+    "relational database", "nosql database", "document store",
+    "indexing strategy", "sharding", "replication",
+    "crud", "crud operations", "data modeling",
   ],
   systems: [
+    // Classic OS / low-level
     "concurrency", "multithreading", "memory management", "operating system",
     "linux kernel", "file system", "process scheduling", "ipc", "shared memory",
     "deadlock", "mutex", "allocator", "fork", "signals", "atomic", "lock free",
     "kernel module", "syscall", "mmap", "page fault", "virtual memory",
     "spinlock", "futex", "epoll", "ptrace",
     "heap allocator", "garbage collector runtime",
+    // Modern systems engineering — Linux, Go, C++, performance
+    "golang", "goroutine", "channel", "go runtime", "go scheduler",
+    "systems engineering", "systems programmer", "systems programming",
+    "linux engineering", "linux fundamentals", "linux systems",
+    "c/c++", "performance engineering", "high performance systems",
+    "low latency", "zero copy", "zero-copy", "memory safe",
+    "async io", "io_uring", "io multiplexing", "event loop",
+    "thread pool", "work stealing", "coroutine", "cooperative scheduling",
+    "posix", "system calls", "process management", "process lifecycle",
+    "runtime engineering", "runtime scheduler",
+    "distributed runtime", "distributed systems engineering",
+    "platform engineering systems", "infrastructure engineering",
+    "network programming", "high throughput", "throughput optimization",
   ],
   mlops: [
-    "mlops", "mlflow", "kubeflow", "airflow", "model serving",
-    "model deployment", "inference", "data pipeline",
+    "mlops", "mlflow", "kubeflow", "model serving",
+    "model deployment", "inference", "ml pipeline", "ml data pipeline",
     "feature store", "experiment tracking", "bentoml", "triton",
-    "model monitoring",
+    "model monitoring", "continuous training", "model registry",
+    "model versioning", "data drift", "prediction drift",
+  ],
+  data_engineering: [
+    // Core ETL / pipeline
+    "etl", "extract transform load",
+    "data pipeline", "data engineering", "data engineer",
+    "analytics engineering", "data analytics pipeline",
+    "data orchestration", "pipeline orchestration",
+    "batch processing", "batch pipeline", "data ingestion",
+    // Processing engines
+    "spark", "apache spark", "pyspark", "hadoop", "hive", "flink", "apache flink",
+    // Workflow orchestration
+    "airflow", "prefect", "dagster", "luigi",
+    // Data warehouses
+    "data warehouse", "redshift", "bigquery", "snowflake", "databricks",
+    "data mart", "olap", "dimensional modeling", "star schema", "fact table",
+    // Data lakes / lakehouses
+    "data lake", "delta lake", "lakehouse", "apache iceberg", "apache hudi",
+    // Transformation
+    "dbt", "data build tool", "sql transformation", "data transformation",
+    // Data quality / governance
+    "data quality", "data lineage", "data catalog", "data governance",
+    "data mesh", "data contract",
+    // Cloud data platforms
+    "cloud data platform", "data platform", "analytics platform",
+    "aws glue", "azure data factory", "google dataflow",
+    // Streaming data
+    "kafka streams", "data streaming", "kinesis", "event streaming pipeline",
+    // Storage formats
+    "parquet", "avro", "orc",
+    // SQL analytics
+    "sql analytics", "analytical sql", "window functions",
+    "business intelligence", "bi dashboard",
   ],
   algorithms: [
     "dsa", "leetcode", "codeforces",
@@ -290,16 +351,18 @@ const OVERLAP_DAMPENING = {
   systems:             { networking: 0.82, embedded: 0.85, distributed_systems: 0.85 },
   networking:          { systems: 0.88, cybersecurity: 0.85 },
   embedded:            { systems: 0.88 },
-  ai_ml:               { data_science: 0.88, mlops: 0.78, genai: 0.72, backend: 0.92, devops: 0.82 },
-  data_science:        { ai_ml: 0.83 },
+  ai_ml:               { data_science: 0.88, mlops: 0.78, genai: 0.72, backend: 0.92, devops: 0.82, data_engineering: 0.80 },
+  data_science:        { ai_ml: 0.83, data_engineering: 0.85 },
   genai:               { ai_ml: 0.82, backend: 0.90 },
   agentic_ai:          { genai: 0.85, backend: 0.90 },
   frontend:            { backend: 0.93, systems: 0.85 },
   backend:             { frontend: 0.88, distributed_systems: 0.86, cybersecurity: 0.84, ai_ml: 0.88 },
-  devops:              { ai_ml: 0.86, distributed_systems: 0.80 },
-  distributed_systems: { backend: 0.90, systems: 0.83, devops: 0.83 },
+  devops:              { ai_ml: 0.86, distributed_systems: 0.80, data_engineering: 0.82 },
+  distributed_systems: { backend: 0.90, systems: 0.83, devops: 0.83, data_engineering: 0.82 },
   cybersecurity:       { networking: 0.82, backend: 0.88 },
   algorithms:          { systems: 0.90, backend: 0.92, ai_ml: 0.92, frontend: 0.90 },
+  data_engineering:    { mlops: 0.78, data_science: 0.82, distributed_systems: 0.82, devops: 0.85 },
+  mlops:               { data_engineering: 0.80 },
 };
 
 // ================= DEP MAP =================
@@ -396,11 +459,17 @@ const DEP_MAP = {
   sqlx:               "database",
   diesel:             "database",
   "sea-orm":          "database",
+  // Data Engineering
+  pyspark:            "data_engineering",
+  "apache-airflow":   "data_engineering",
+  airflow:            "data_engineering",
+  "dbt-core":         "data_engineering",
+  prefect:            "data_engineering",
+  dagster:            "data_engineering",
+  luigi:              "data_engineering",
   // MLOps
   mlflow:             "mlops",
   bentoml:            "mlops",
-  airflow:            "mlops",
-  prefect:            "mlops",
   dvc:                "mlops",
   evidently:          "mlops",
   ray:                "mlops",
@@ -444,7 +513,6 @@ const DEP_MAP = {
   "python-etcd":      "distributed_systems",
   "aiokafka":         "distributed_systems",
   "confluent-kafka":  "distributed_systems",
-  "pyspark":          "distributed_systems",
 };
 
 // Each domain is represented by short focused exemplar phrases (prototypes).
@@ -590,20 +658,38 @@ const DOMAIN_PROTOTYPES = {
   ],
 
   systems: [
+    // Classic low-level OS / kernel
     "lock-free concurrency futex atomic memory ordering",
     "fork exec waitpid POSIX signal zombie process management",
     "kernel module syscall ioctl scheduler preemption context switch",
     "shared memory IPC UNIX pipe semaphore virtual address space",
+    // Modern systems engineering — Go, Linux, infra runtimes
+    "Golang goroutine channel concurrency systems programming performance",
+    "C++ systems engineering Linux performance-critical infrastructure runtime",
+    "Linux engineering systems programming Golang C++ high-performance backend",
+    "async I/O io_uring epoll event loop concurrent server low-latency systems",
+    "systems engineering Linux fundamentals C++ Golang REST API networking",
+    "high-performance concurrent server Golang Linux zero-copy network programming",
+    "distributed runtime platform engineering Linux infrastructure performance",
   ],
 
   mlops: [
     "MLflow experiment tracking model registry artifact",
     "automated ML retraining pipeline CI/CD gate",
     "BentoML Triton model serving inference endpoint",
-    "Airflow DAG Prefect feature store pipeline",
+    "Prefect Dagster feature store ML pipeline orchestration",
     "model drift monitoring production distribution shift",
-    // Infra primitives that signal production ML maturity
     "Docker Kubernetes bash Linux model deployment serving infrastructure",
+  ],
+
+  data_engineering: [
+    "ETL pipeline Spark PySpark batch processing data ingestion transformation",
+    "Airflow DAG orchestration pipeline scheduling workflow data engineering",
+    "data warehouse Redshift BigQuery Snowflake dimensional modeling star schema",
+    "dbt data build tool SQL transformation analytics engineering data modeling",
+    "data lake Delta Lake Iceberg Lakehouse S3 Parquet batch streaming",
+    "Kafka Flink streaming data platform cloud analytics ingestion pipeline",
+    "data quality lineage catalog governance data mesh analytics platform ETL",
   ],
 
   algorithms: [
@@ -700,7 +786,7 @@ const MLOPS_REQUIRED_EVIDENCE = [
 ];
 
 // Bump whenever DOMAIN_PROTOTYPES change — forces a re-embed on next startup.
-const DOMAIN_DESC_VERSION = "v32";
+const DOMAIN_DESC_VERSION = "v34";
 
 // ── Depth Signal Weights ──────────────────────────────────────────────────────
 // Tokens detected in deps + readme + topics that signal engineering sophistication.

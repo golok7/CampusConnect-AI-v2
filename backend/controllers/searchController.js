@@ -1,5 +1,6 @@
-const { searchUsers } = require("../services/searchService");
-const { DOMAIN_SET }  = require("../constants/domains");
+const { searchUsers }   = require("../services/searchService");
+const { DOMAIN_SET }    = require("../constants/domains");
+const { parseJDQuery }  = require("../services/jdQueryParser");
 
 // ── Module-level constants ─────────────────────────────────────────────────────
 const VALID_ROLES   = new Set(["student", "faculty", "recruiter"]);
@@ -100,5 +101,60 @@ exports.searchUsersHandler = async (req, res) => {
   } catch (err) {
     console.error("Search error:", err.message);
     return res.status(500).json({ message: "Search failed" });
+  }
+};
+
+// ── POST /search/semantic ─────────────────────────────────────────────────────
+// Body: { query, limit?, debug? }
+// Parses a free-text recruiter JD into skills + domains, then delegates to searchUsers.
+exports.semanticSearchHandler = async (req, res) => {
+  try {
+    const { query, limit, debug } = req.body;
+
+    // Validate query
+    if (!query || typeof query !== "string" || query.trim().length === 0) {
+      return res.status(400).json({ message: "query is required and must be a non-empty string" });
+    }
+    if (query.length > 2000) {
+      return res.status(400).json({ message: "query must not exceed 2000 characters" });
+    }
+
+    // Validate limit
+    let parsedLimit = DEFAULT_LIMIT;
+    if (limit !== undefined) {
+      parsedLimit = parseInt(limit, 10);
+      if (isNaN(parsedLimit) || parsedLimit < 1) {
+        return res.status(400).json({ message: "limit must be a positive integer" });
+      }
+      parsedLimit = Math.min(parsedLimit, MAX_LIMIT);
+    }
+
+    // Parse JD into skills + domain relevance vector
+    const { skills, domainRelevance, topDomains, domainConfidences, queryIntent, extractionMethod } =
+      await parseJDQuery(query.trim());
+
+    // Delegate to ranking engine — passes domainRelevance vector for dot-product scoring
+    const result = await searchUsers({
+      skills,
+      domainRelevance,
+      limit:   parsedLimit,
+      debug:   debug || false,
+    });
+
+    return res.json({
+      queryInterpretation: {
+        extractedSkills:    skills,
+        topDomains,
+        domainRelevance,
+        domainConfidences,
+        queryIntent,
+        extractionMethod,
+      },
+      ...result,
+    });
+
+  } catch (err) {
+    console.error("Semantic search error:", err.message);
+    return res.status(500).json({ message: "Semantic search failed" });
   }
 };

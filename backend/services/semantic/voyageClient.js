@@ -187,6 +187,7 @@ module.exports = {
   SOFTMAX_TEMP,
   cosineSimilarity,
   computeSims,
+  callVoyageAPI,
   getDomainEmbeddings,
   batchEmbedSummaries,
 };

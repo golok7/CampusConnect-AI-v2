@@ -4,6 +4,7 @@
 const DOMAIN_LIST = [
   "frontend", "backend", "devops", "database", "systems",
   "ai_ml", "genai", "agentic_ai", "mlops", "data_science",
+  "data_engineering",
   "algorithms", "cybersecurity", "blockchain", "embedded", "networking",
   "distributed_systems",
 ];
@@ -25,6 +26,7 @@ const DOMAIN_INTEREST_MAP = {
   agentic_ai:    "Agentic AI Development",
   mlops:         "MLOps & Model Deployment",
   data_science:  "Data Science & Analytics",
+  data_engineering: "Data Engineering & Analytics",
   backend:       "Backend Development",
   frontend:      "Frontend Development",
   devops:        "DevOps & Cloud",

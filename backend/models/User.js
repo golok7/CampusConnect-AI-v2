@@ -127,6 +127,10 @@ const userSchema = new mongoose.Schema({
   // Rebuilt on every GitHub fetch — do not edit manually.
   normalizedSkills: { type: [String], default: [] },
 
+  // Full structured output from the Resume Intelligence microservice.
+  // Stored as Mixed to avoid schema coupling with the Python service response.
+  resumeData: { type: mongoose.Schema.Types.Mixed, default: null },
+
 }, { timestamps: true });
 
 // ── Indexes ───────────────────────────────────────────────────────────────────

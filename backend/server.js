@@ -12,6 +12,10 @@ const leaderboardRoutes    = require("./routes/leaderboard");
 const searchRoutes         = require("./routes/search");
 const adminRoutes          = require("./routes/admin");
 const profileRoutes        = require("./routes/profile");
+const ontologyRoutes       = require("./routes/ontology");
+const resumeRoutes         = require("./routes/resume");
+const pipelineRoutes       = require("./routes/pipeline");
+const interviewRoutes      = require("./routes/interview");
 
 // ── App init ───────────────────────────────────────────────────────────────────
 const app  = express();
@@ -35,6 +39,10 @@ app.use("/leaderboard", leaderboardRoutes);
 app.use("/search",      searchRoutes);
 app.use("/admin",       adminRoutes);
 app.use("/users",       profileRoutes);
+app.use("/api/ontology", ontologyRoutes);
+app.use("/resume",      resumeRoutes);
+app.use("/pipeline",    pipelineRoutes);
+app.use("/interview",   interviewRoutes);
 
 // ── 404 handler ────────────────────────────────────────────────────────────────
 app.use((req, res) => {
