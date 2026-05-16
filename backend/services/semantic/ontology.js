@@ -148,6 +148,22 @@ const DOMAIN_RULES = {
     "bash", "shell script", "shell scripting", "linux", "unix",
     "bash automation", "bash scripting", "server provisioning",
     "system administration", "sysadmin",
+    // Multi-service / distributed deployment topology
+    "docker compose", "docker-compose", "multi-container", "multi-service deployment",
+    "service topology", "container cluster", "replica", "replicas",
+    "load balancer", "load balancing", "reverse proxy", "proxy server",
+    "ingress", "ingress controller", "service mesh", "envoy proxy",
+    // Production readiness signals
+    "health check", "readiness probe", "liveness probe", "graceful shutdown",
+    "resource limits", "autoscaling", "horizontal pod autoscaler", "hpa",
+    "persistent volume", "pvc", "storage class",
+    // Cloud-native / 12-factor
+    "cloud native", "12-factor", "twelve-factor", "immutable infrastructure",
+    "stateless service", "externalized config", "environment variable management",
+    // Distributed infra patterns (cross-domain signal for DevOps)
+    "distributed deployment", "distributed infrastructure", "cluster management",
+    "node affinity", "pod scheduling", "rolling update", "zero downtime",
+    "self-healing", "auto-recovery", "failover",
   ],
   database: [
     "mongo", "mysql", "postgres", "redis", "database", "sql",
@@ -250,6 +266,12 @@ const DOMAIN_RULES = {
     "eventual consistency",
     "mapreduce", "distributed hash table", "distributed file system",
     "linearizability", "distributed transaction",
+    // Practical distributed infra — file systems, storage engines, cluster coordination
+    "chunkserver", "chunk server", "chunk replication",
+    "master node", "worker node", "cluster coordinator",
+    "heartbeat", "node failure", "failure recovery",
+    "gfs", "hdfs", "distributed log",
+    "replicated state machine", "distributed key value",
     // Modern distributed coordination — event-driven / async systems
     "event driven architecture", "event-driven architecture",
     "message queue", "distributed queue",
@@ -274,7 +296,7 @@ const OVERLAP_DAMPENING = {
   agentic_ai:          { genai: 0.85, backend: 0.90 },
   frontend:            { backend: 0.93, systems: 0.85 },
   backend:             { frontend: 0.88, distributed_systems: 0.86, cybersecurity: 0.84, ai_ml: 0.88 },
-  devops:              { ai_ml: 0.86 },
+  devops:              { ai_ml: 0.86, distributed_systems: 0.80 },
   distributed_systems: { backend: 0.90, systems: 0.83, devops: 0.83 },
   cybersecurity:       { networking: 0.82, backend: 0.88 },
   algorithms:          { systems: 0.90, backend: 0.92, ai_ml: 0.92, frontend: 0.90 },
@@ -545,6 +567,18 @@ const DOMAIN_PROTOTYPES = {
     // Linux / shell infra (supporting signal — Docker/K8s still dominate)
     "Linux server bash shell scripting system administration automation",
     "Unix shell script server provisioning infrastructure automation",
+    // Multi-service distributed deployment topology
+    "Docker Compose multi-service deployment container networking replica",
+    "Kubernetes deployment service ingress replica load balancing production",
+    "distributed infrastructure deployment cluster replica health check scaling",
+    "cloud-native production deployment Docker Kubernetes autoscaling zero-downtime",
+    // Production readiness and operational depth
+    "health check readiness probe liveness probe graceful shutdown resource limits",
+    "container orchestration replica autoscaler persistent volume cloud native",
+    "reverse proxy load balancer nginx ingress service mesh production deployment",
+    // Infra-heavy project patterns
+    "production infrastructure Docker Compose multi-container networking proxy",
+    "Docker Kubernetes deployment pipeline release automation cloud operations",
   ],
 
   database: [
@@ -639,6 +673,11 @@ const DOMAIN_PROTOTYPES = {
     "distributed queue worker orchestration async messaging",
     "stream processing realtime synchronization distributed services",
     "distributed task coordination websocket event pipeline",
+    // Practical distributed infrastructure — GFS, Chord, HDFS style projects
+    "distributed file system chunk replication heartbeat leader election",
+    "master chunkserver distributed storage coordination failure recovery",
+    "Google file system distributed storage chunk routing replication metadata",
+    "distributed filesystem node replication streaming cluster coordination",
   ],
 };
 
@@ -661,7 +700,73 @@ const MLOPS_REQUIRED_EVIDENCE = [
 ];
 
 // Bump whenever DOMAIN_PROTOTYPES change — forces a re-embed on next startup.
-const DOMAIN_DESC_VERSION = "v30";
+const DOMAIN_DESC_VERSION = "v32";
+
+// ── Depth Signal Weights ──────────────────────────────────────────────────────
+// Tokens detected in deps + readme + topics that signal engineering sophistication.
+// Score = sum of matched weights, capped at 1.0 via normalization in githubService.
+// These are REPO-LEVEL signals — not domain classification, but project maturity.
+//
+// Tiers:
+//   3 — architecture-defining (Kafka, Kubernetes, gRPC, Terraform)
+//   2 — infra maturity (Docker, Redis, CI/CD, vector DB, testing frameworks)
+//   1 — supporting signal (worker, queue, health check, async)
+const DEPTH_SIGNAL_WEIGHTS = {
+  // Container / orchestration (architecture-defining)
+  kubernetes:          3,
+  "k8s":               3,
+  terraform:           3,
+  helm:                3,
+  kafka:               3,
+  grpc:                3,
+  "grpcio":            3,
+  rabbitmq:            3,
+  // Infra maturity
+  docker:              2,
+  "docker-compose":    2,
+  redis:               2,
+  "github actions":    2,
+  "gitlab ci":         2,
+  jenkins:             2,
+  prometheus:          2,
+  grafana:             2,
+  nginx:               2,
+  // Vector DB / AI infra
+  pinecone:            2,
+  weaviate:            2,
+  qdrant:              2,
+  "qdrant-client":     2,
+  chromadb:            2,
+  faiss:               2,
+  "faiss-cpu":         2,
+  // Testing maturity
+  pytest:              2,
+  jest:                2,
+  vitest:              2,
+  playwright:          2,
+  cypress:             2,
+  // Concurrency / async patterns
+  celery:              2,
+  bullmq:              2,
+  bull:                2,
+  rq:                  2,
+  // Supporting signals
+  "health check":      1,
+  "readiness probe":   1,
+  "liveness probe":    1,
+  "graceful shutdown": 1,
+  worker:              1,
+  queue:               1,
+  websocket:           1,
+  "websockets":        1,
+  "socket.io":         1,
+  airflow:             2,
+  prefect:             2,
+  mlflow:              2,
+};
+
+// Max raw depth score before normalization — roughly 3 strong signals = 1.0
+const DEPTH_SCORE_NORMALIZER = 9;
 
 module.exports = {
   DOMAIN_RULES,
@@ -669,5 +774,7 @@ module.exports = {
   DEP_MAP,
   DOMAIN_PROTOTYPES,
   MLOPS_REQUIRED_EVIDENCE,
+  DEPTH_SIGNAL_WEIGHTS,
+  DEPTH_SCORE_NORMALIZER,
   DOMAIN_DESC_VERSION,
 };

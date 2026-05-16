@@ -14,14 +14,56 @@ function githubHeaders() {
 
 async function safeGet(url, headers) {
   try {
-    return await axios.get(url, { headers });
-  } catch (err) {
-    if (err.response?.status === 403 || err.response?.status === 429) {
-      const reset = err.response.headers["x-ratelimit-reset"];
-      const resetTime = reset ? new Date(reset * 1000).toISOString() : "unknown";
-      console.warn(`[github] rate limited. Resets at ${resetTime}`);
-      throw new Error("GitHub rate limit hit — add a GITHUB_TOKEN to your .env");
+    const res = await axios.get(url, { headers });
+    const remaining = res.headers["x-ratelimit-remaining"];
+    if (remaining !== undefined && parseInt(remaining, 10) < 50) {
+      console.warn(`[github] rate limit low: ${remaining} requests remaining`);
     }
+    return res;
+  } catch (err) {
+    const status = err.response?.status;
+
+    if (status === 401) {
+      console.error("[github] 401 — token invalid or expired");
+      throw new Error("GitHub token is invalid or expired. Generate a new token at https://github.com/settings/tokens");
+    }
+
+    if (status === 403) {
+      const body    = err.response?.data;
+      const message = typeof body === "object" ? body?.message : body;
+      const reset   = err.response?.headers["x-ratelimit-reset"];
+      const resetTime = reset ? new Date(reset * 1000).toLocaleTimeString() : "unknown";
+      const remaining = err.response?.headers["x-ratelimit-remaining"];
+
+      // GitHub returns 403 for rate limit when remaining = 0
+      if (remaining === "0" || message?.toLowerCase().includes("rate limit")) {
+        console.error(`[github] rate limit exhausted. Resets at ${resetTime}`);
+        throw new Error(`rate limit — resets at ${resetTime}. Make sure GITHUB_TOKEN is set in .env and server was restarted.`);
+      }
+
+      // 403 for other reasons (token missing scope, private repo, etc.)
+      console.error(`[github] 403 forbidden: ${message}`);
+      throw new Error(`GitHub access denied (403): ${message || "token may lack required permissions"}`);
+    }
+
+    if (status === 429) {
+      const reset = err.response?.headers["x-ratelimit-reset"];
+      const resetTime = reset ? new Date(reset * 1000).toLocaleTimeString() : "unknown";
+      console.error(`[github] secondary rate limit. Resets at ${resetTime}`);
+      throw new Error(`rate limit — secondary rate limit hit. Resets at ${resetTime}`);
+    }
+
+    throw err;
+  }
+}
+
+// Checks current rate limit status without consuming any API quota.
+async function getRateLimit() {
+  try {
+    const res = await axios.get("https://api.github.com/rate_limit", { headers: githubHeaders() });
+    return res.data;
+  } catch (err) {
+    if (err.response?.status === 401) throw new Error("GitHub token invalid or expired");
     throw err;
   }
 }
@@ -153,4 +195,5 @@ module.exports = {
   getProfileReadme,
   getDependencies,
   getContributorCommits,
+  getRateLimit,
 };

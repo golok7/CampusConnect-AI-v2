@@ -244,12 +244,21 @@ function buildWhyMatched(user, requestedDomains, requestedSkills, skillInfo) {
  * @param {number}       opts.limit    - Max results
  * @param {string|false} opts.debug    - "summary" | "full" | false
  */
+const ACTIVITY_RANGES = {
+  high:   { $gte: 200 },
+  medium: { $gte: 80, $lt: 200 },
+  low:    { $lt: 80 },
+};
+
 exports.searchUsers = async ({
-  skills  = [],
-  domains = [],
+  skills    = [],
+  domains   = [],
   role,
-  limit   = SEARCH_DEFAULTS.limit,
-  debug   = false,
+  years     = [],
+  branches  = [],
+  activity  = null,
+  limit     = SEARCH_DEFAULTS.limit,
+  debug     = false,
 }) => {
   const safeLimit      = Math.min(limit, SEARCH_DEFAULTS.MAX_LIMIT);
   const normalizedReqs = skills.map(s => s.toLowerCase().trim()).filter(Boolean);
@@ -261,7 +270,12 @@ exports.searchUsers = async ({
 
   // ── Stage 1: Domain threshold pre-filter ──
   const dbQuery = { githubUsername: { $exists: true, $ne: null } };
-  if (role)           dbQuery.role = role;
+  if (role)             dbQuery.role = role;
+  if (years.length)     dbQuery.year = { $in: years };
+  if (branches.length)  dbQuery.branch = { $in: branches };
+  if (activity && ACTIVITY_RANGES[activity]) {
+    dbQuery.activityScore = ACTIVITY_RANGES[activity];
+  }
   if (domains.length) {
     dbQuery.$or = domains.map(domain => ({
       [`domainScores.${domain}`]: { $gte: DOMAIN_THRESHOLD },

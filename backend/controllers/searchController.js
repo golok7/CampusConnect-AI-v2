@@ -16,12 +16,17 @@ const MAX_LIMIT     = 50;
 //   debug   — "summary" | "full" | "true" — enables ranking observability fields
 //
 // Response: { total, results: [...], [searchDebug, mongoQuery, ...when debug] }
+const VALID_ACTIVITY = new Set(["high", "medium", "low"]);
+
 exports.searchUsersHandler = async (req, res) => {
   try {
     const {
-      skills:  skillsParam,
-      domains: domainsParam,
+      skills:   skillsParam,
+      domains:  domainsParam,
       role,
+      year:     yearParam,
+      branch:   branchParam,
+      activity: activityParam,
       limit,
       debug,
     } = req.query;
@@ -49,6 +54,22 @@ exports.searchUsersHandler = async (req, res) => {
       return res.status(400).json({ message: "role must be student, faculty, or recruiter" });
     }
 
+    // ── Parse year ──
+    const years = yearParam
+      ? yearParam.split(",").map(y => parseInt(y.trim(), 10)).filter(y => !isNaN(y) && y >= 1 && y <= 4)
+      : [];
+
+    // ── Parse branch ──
+    const branches = branchParam
+      ? branchParam.split(",").map(b => b.trim().toUpperCase()).filter(Boolean)
+      : [];
+
+    // ── Validate activity ──
+    const activity = activityParam ? activityParam.trim().toLowerCase() : null;
+    if (activity && !VALID_ACTIVITY.has(activity)) {
+      return res.status(400).json({ message: "activity must be high, medium, or low" });
+    }
+
     // ── Parse limit — cap hard at MAX_LIMIT ──
     const parsedLimit = limit
       ? Math.min(parseInt(limit, 10), MAX_LIMIT)
@@ -65,10 +86,13 @@ exports.searchUsersHandler = async (req, res) => {
 
     const result = await searchUsers({
       skills,
-      domains: rawDomains,
+      domains:  rawDomains,
       role,
-      limit:   parsedLimit,
-      debug:   debug || false,
+      years,
+      branches,
+      activity,
+      limit:    parsedLimit,
+      debug:    debug || false,
     });
 
     return res.json(result);

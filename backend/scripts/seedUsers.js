@@ -57,10 +57,8 @@ const SEED_USERS = [
   { name: "Aditya Bose",     email: "s21@campusconnect.test", role: "student", branch: "CSE", year: 3, githubUsername: "SaranDharshanSP" },
   { name: "Nandini Krishnan",email: "s22@campusconnect.test", role: "student", branch: "IT",  year: 1, githubUsername: "IAmRiteshKoushik" },
   { name: "Pranav Mehta",    email: "s23@campusconnect.test", role: "student", branch: "CSE", year: 2, githubUsername: "RD-Tarun" },
-  { name: "Riya Chatterjee", email: "s24@campusconnect.test", role: "student", branch: "EEE", year: 4, githubUsername: "Barathj121" },
-  { name: "Suresh Nambiar",  email: "s25@campusconnect.test", role: "student", branch: "CSE", year: 3, githubUsername: "TharunKumarrA" },
-  { name: "Tanya Malhotra",  email: "s26@campusconnect.test", role: "student", branch: "IT",  year: 2, githubUsername: "Sajithrajan03" },
-  { name: "Yash Patil",      email: "s27@campusconnect.test", role: "student", branch: "CSE", year: 1, githubUsername: "sandy-sachin7" },
+  { name: "Suresh Nambiar",  email: "s24@campusconnect.test", role: "student", branch: "CSE", year: 3, githubUsername: "TharunKumarrA" },
+  { name: "Yash Patil",      email: "s25@campusconnect.test", role: "student", branch: "CSE", year: 1, githubUsername: "sandy-sachin7" },
   // ── Faculty ───────────────────────────────────────────────────────────────
   { name: "Dr. Anand Kumar", email: "f1@campusconnect.test",  role: "faculty",   branch: "CSE", year: null, githubUsername: "REPLACE_ME" },
   { name: "Dr. Priya Iyer",  email: "f2@campusconnect.test",  role: "faculty",   branch: "IT",  year: null, githubUsername: "REPLACE_ME" },

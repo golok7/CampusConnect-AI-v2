@@ -2,7 +2,7 @@ const { getAllRepos, getReadme, getProfileReadme, getDependencies, getContributo
 const { repoQualityScore, repoImportanceScore, repoRecencyScore, forkContributionScore, forkTier, forkMultiplier } = require("./scoring/repoScoring");
 const { batchEmbedSummaries } = require("./semantic/voyageClient");
 const { voyageToSemanticPrior, computeEmbeddingConfidence, computePriorEntropy, getKeywordRefinements, applyKeywordRefinements, normalizeDomainProbabilities, applyOverlapDampening } = require("./semantic/semanticPipeline");
-const { MLOPS_REQUIRED_EVIDENCE, DOMAIN_RULES, DEP_MAP } = require("./semantic/ontology");
+const { MLOPS_REQUIRED_EVIDENCE, DOMAIN_RULES, DEP_MAP, DEPTH_SIGNAL_WEIGHTS, DEPTH_SCORE_NORMALIZER } = require("./semantic/ontology");
 const { classifyRepo, getRepoWeight, scoreDomainsGuarded, isMlResearchRepo } = require("./classification/repoClassifier");
 const { extractAllSkills, extractSkillsFromText } = require("./skills/extractSkills");
 const { normalizeSkillName, ALIAS_TO_CATEGORY }   = require("./skills/skillOntology");
@@ -20,6 +20,43 @@ function hasMlOpsEvidence(text) {
   if (!text) return false;
   const lower = text.toLowerCase();
   return MLOPS_REQUIRED_EVIDENCE.some(s => lower.includes(s));
+}
+
+// Language-based domain fallback for repos that produce no keyword/dep signal in Phase 1.
+// Applies only when the repo has no other domain evidence — represents the weakest signal tier.
+const LANGUAGE_DOMAIN_FALLBACK = {
+  "jupyter notebook": "ai_ml",
+  "python":           "ai_ml",
+  "rust":             "systems",
+  "go":               "backend",
+  "kotlin":           "frontend",
+  "dart":             "frontend",
+  "haskell":          "algorithms",
+  "c":                "systems",
+  "c++":              "systems",
+  "c#":               "backend",
+  "java":             "backend",
+  "ruby":             "backend",
+  "php":              "backend",
+  "shell":            "devops",
+  "lua":              "devops",
+  "emacs lisp":       "devops",
+  "brainfuck":        "devops",
+  "typst":            "devops",
+  "svelte":           "frontend",
+  "css":              "frontend",
+  "html":             "frontend",
+};
+
+// Scores a repo's engineering depth from deps + readme + topics.
+// Returns a value in [0, 1] — 1.0 means 3+ strong infra signals detected.
+function computeDepthScore(deps, readme, topics) {
+  const text  = `${deps} ${readme} ${(topics || []).join(" ")}`.toLowerCase();
+  let   raw   = 0;
+  for (const [token, weight] of Object.entries(DEPTH_SIGNAL_WEIGHTS)) {
+    if (text.includes(token)) raw += weight;
+  }
+  return Math.min(raw / DEPTH_SCORE_NORMALIZER, 1.0);
 }
 
 // Returns the top-5 entries of an object sorted by value descending, rounded to 4dp.
@@ -84,7 +121,7 @@ exports.fetchGithubData = async (username) => {
       repoP1Domains[repo.name]     = { ...domains };
       repoContributions[repo.name] = {};
 
-      if (isDebug) repoDebug[repo.name] = { name: repo.name, type, finalDomains: null };
+      if (isDebug) repoDebug[repo.name] = { name: repo.name, type, finalDomains: null, scorePath: "pending" };
 
       if (repo.language) languages.add(repo.language);
       totalStars += repo.stargazers_count;
@@ -132,7 +169,8 @@ exports.fetchGithubData = async (username) => {
       })
     );
 
-    const commitCounts = new Map(enriched.map(({ repo, userCommits }) => [repo.name, userCommits]));
+    const commitCounts  = new Map(enriched.map(({ repo, userCommits }) => [repo.name, userCommits]));
+    const enrichedByName = new Map(enriched.map(({ repo, readme, deps }) => [repo.name, { readme: readme || "", deps: deps || "" }]));
 
     const nonZero = [...commitCounts.entries()].filter(([, c]) => c > 0).sort((a, b) => b[1] - a[1]);
     console.log(`[commits] ${nonZero.length}/${commitCounts.size} enriched repos have your commits`);
@@ -480,8 +518,13 @@ exports.fetchGithubData = async (username) => {
       const rawScore = Math.max(repoQualityScore(repo), 1);
       const score    = rawScore * weight * PHASE1_FALLBACK_SCALE * repoRecencyScore(repo);
 
-      const p1Domains = repoP1Domains[repo.name] || {};
-      if (Object.keys(p1Domains).length === 0) continue;
+      let p1Domains = repoP1Domains[repo.name] || {};
+      if (Object.keys(p1Domains).length === 0) {
+        const langKey    = (repo.language || "").toLowerCase();
+        const langDomain = LANGUAGE_DOMAIN_FALLBACK[langKey];
+        if (!langDomain) continue;
+        p1Domains = { [langDomain]: 0.3 };
+      }
 
       const total = Object.values(p1Domains).reduce((s, v) => s + v, 0) || 1;
 
@@ -491,6 +534,11 @@ exports.fetchGithubData = async (username) => {
         const c = (p1Domains[d] / total) * score * p1RepoWeight;
         skillCounts[d]                  = (skillCounts[d] || 0) + c;
         repoContributions[repo.name][d] = (repoContributions[repo.name][d] || 0) + c;
+      }
+
+      if (isDebug && repoDebug[repo.name]) {
+        repoDebug[repo.name].finalDomains = top5(p1Domains);
+        repoDebug[repo.name].scorePath    = "phase1-only";
       }
     }
 
@@ -617,10 +665,22 @@ exports.fetchGithubData = async (username) => {
           const contrib  = repoContributions[r.name] || {};
           const topEntry = Object.entries(contrib).sort((a, b) => b[1] - a[1])[0];
           if (!topEntry) return null;
+          const domains = Object.fromEntries(
+            Object.entries(contrib)
+              .filter(([, v]) => v >= 0.05)
+              .map(([d, v]) => [d, Math.round(v * 1000) / 1000])
+          );
+          const enrichData = enrichedByName.get(r.name);
+          const depthScore = enrichData
+            ? computeDepthScore(enrichData.deps, enrichData.readme, r.topics)
+            : 0;
           return {
             repoName:       r.name,
             dominantDomain: topEntry[0],
             semanticScore:  Math.round(topEntry[1] * 1000) / 1000,
+            description:    r.description || null,
+            domains,
+            depthScore:     Math.round(depthScore * 1000) / 1000,
           };
         })
         .filter(Boolean),

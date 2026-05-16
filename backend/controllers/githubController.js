@@ -145,9 +145,13 @@ exports.getGithubData = async (req, res) => {
     console.error("GitHub fetch error:", err.message);
 
     if (err.message?.includes("rate limit")) {
-      return res.status(429).json({
-        message: "GitHub API rate limit hit. Try again in a few minutes, or add a GITHUB_TOKEN.",
-      });
+      return res.status(429).json({ message: `GitHub API ${err.message}` });
+    }
+    if (err.message?.includes("invalid or expired")) {
+      return res.status(401).json({ message: err.message });
+    }
+    if (err.message?.includes("access denied") || err.message?.includes("403")) {
+      return res.status(403).json({ message: err.message });
     }
     if (err.message?.includes("VOYAGE_API_KEY")) {
       console.warn("Voyage AI key missing — scoring ran in keyword-only mode.");
