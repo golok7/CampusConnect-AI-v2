@@ -57,7 +57,14 @@ const SKILL_ONTOLOGY = {
     { display: "Flutter",         aliases: ["flutter"] },
     { display: "React Native",    aliases: ["react-native", "react native", "reactnative"] },
     { display: "Expo",            aliases: ["expo"] },
-    { display: "Node.js",         aliases: ["nodejs", "node.js", "node-js"] },
+    { display: "Node.js",         aliases: ["nodejs", "node.js", "node-js", "node js", "node"] },
+    { display: "MERN Stack",      aliases: ["mern", "mern stack"] },
+    { display: "MEAN Stack",      aliases: ["mean", "mean stack"] },
+    { display: "Full Stack",      aliases: [
+        "full stack", "full-stack", "fullstack",
+        "full stack development", "full stack developer",
+        "full stack web development", "fullstack development",
+    ]},
   ],
 
   libraries: [
@@ -207,10 +214,13 @@ const SKILL_ONTOLOGY = {
     { display: "Speech-to-Text",  aliases: ["speech-to-text", "speech to text", "stt", "transcription", "whisper"] },
     // API paradigms
     { display: "REST API",        aliases: [
-        "rest api", "rest_api", "rest-api", "restapi",
-        "restful api", "restful-api", "restful_api",
+        "rest api", "rest apis",
+        "rest_api", "rest-api", "restapi",
+        "restful api", "restful apis", "restful-api", "restful_api",
+        "restful services", "rest endpoints", "api endpoints",
         "rest", "restful",
-        "api development", "backend api", "web api", "http api",
+        "web api", "web apis", "http api", "http apis",
+        "api development", "backend api",
         "http rest", "json api", "json rest",
     ]},
     // DevTools / IDEs / Design
@@ -443,7 +453,14 @@ const TEXT_KEYWORDS = [
   ["apache flink",        "Flink"],
   // REST API — all surface forms → single canonical token
   ["rest api",            "REST API"],
+  ["rest apis",           "REST API"],
   ["restful api",         "REST API"],
+  ["restful apis",        "REST API"],
+  ["restful services",    "REST API"],
+  ["rest endpoints",      "REST API"],
+  ["api endpoints",       "REST API"],
+  ["web api",             "REST API"],
+  ["web apis",            "REST API"],
   ["rest-api",            "REST API"],
   ["restapi",             "REST API"],
   ["restful-api",         "REST API"],
@@ -452,8 +469,25 @@ const TEXT_KEYWORDS = [
   ["restful",             "REST API"],
   ["json api",            "REST API"],
   ["http api",            "REST API"],
+  ["http apis",           "REST API"],
   ["api development",     "REST API"],
   ["backend api",         "REST API"],
+  // Stack compounds
+  ["mern",                "MERN Stack"],
+  ["mern stack",          "MERN Stack"],
+  ["mean",                "MEAN Stack"],
+  ["mean stack",          "MEAN Stack"],
+  // Full Stack
+  ["full stack",              "Full Stack"],
+  ["full-stack",              "Full Stack"],
+  ["fullstack",               "Full Stack"],
+  ["full stack development",  "Full Stack"],
+  ["full stack developer",    "Full Stack"],
+  ["full stack web development", "Full Stack"],
+  ["fullstack development",   "Full Stack"],
+  // Node.js bare forms
+  ["node js",             "Node.js"],
+  ["node",                "Node.js"],
   // Backend / Infra
   ["kafka",               "Kafka"],
   ["rabbitmq",            "RabbitMQ"],

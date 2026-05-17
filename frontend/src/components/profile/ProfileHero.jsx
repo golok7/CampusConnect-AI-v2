@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { getDomainConfig } from "../../constants/domains.js";
+import { resumeApi } from "../../services/api.js";
 
 function DomainTag({ domain }) {
   const cfg = getDomainConfig(domain);
@@ -22,6 +24,41 @@ function Signal({ value, label }) {
   );
 }
 
+function DownloadResumeButton({ githubUsername }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function handleDownload() {
+    setLoading(true);
+    setError(null);
+    try {
+      await resumeApi.download(githubUsername);
+    } catch {
+      setError("Unavailable");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <button
+      onClick={handleDownload}
+      disabled={loading}
+      title="Download resume"
+      className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 border border-zinc-800 hover:border-zinc-600 px-2.5 py-1 rounded-md transition-colors disabled:opacity-50"
+    >
+      {loading ? (
+        <span className="w-3 h-3 rounded-full border border-zinc-600 border-t-zinc-300 animate-spin" />
+      ) : (
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 1v7M3 6l3 3 3-3M1 10h10" />
+        </svg>
+      )}
+      {error ? error : "Resume"}
+    </button>
+  );
+}
+
 export default function ProfileHero({ profile }) {
   const {
     name,
@@ -33,6 +70,7 @@ export default function ProfileHero({ profile }) {
     topDomains = [],
     contributionStats,
     skillEvidence,
+    hasResume,
   } = profile;
 
   const topFour   = topDomains.slice(0, 4);
@@ -74,6 +112,9 @@ export default function ProfileHero({ profile }) {
                   >
                     @{githubUsername}
                   </a>
+                  {hasResume && (
+                    <DownloadResumeButton githubUsername={githubUsername} />
+                  )}
                   {branch && (
                     <>
                       <span className="text-zinc-700">·</span>

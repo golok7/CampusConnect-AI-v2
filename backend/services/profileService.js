@@ -218,6 +218,8 @@ exports.getProfile = async (githubUsername) => {
       "githubData.stars":          1,
       "githubData.totalCommits":   1,
       "githubData.repoTypeCounts": 1,
+      // Only need existence check — don't send full blob to frontend
+      resumeData:                  1,
     }
   ).lean();
 
@@ -241,5 +243,6 @@ exports.getProfile = async (githubUsername) => {
     skillEvidence,
     domainEvidence: { topDomains, domainEvidence },
     contributionStats,
+    hasResume:      !!user.resumeData,
   };
 };

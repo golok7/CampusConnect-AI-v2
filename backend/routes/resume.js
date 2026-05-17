@@ -1,7 +1,7 @@
 const express = require("express");
 const multer  = require("multer");
 const auth    = require("../middleware/auth");
-const { uploadResume } = require("../controllers/resumeController");
+const { uploadResume, downloadResume } = require("../controllers/resumeController");
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -22,5 +22,8 @@ const upload = multer({
 const router = express.Router();
 
 router.post("/upload", auth, upload.single("resume"), uploadResume);
+
+// GET /resume/download/:githubUsername — returns the original uploaded resume file
+router.get("/download/:githubUsername", auth, downloadResume);
 
 module.exports = router;

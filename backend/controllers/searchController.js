@@ -104,6 +104,121 @@ exports.searchUsersHandler = async (req, res) => {
   }
 };
 
+// ── POST /search ──────────────────────────────────────────────────────────────
+// Unified endpoint — combines filter-based and semantic search in one call.
+//
+// Body:
+//   query?    — free-text JD / description (optional)
+//   domains?  — string[] selected domain filters, applied as hard gate first
+//   skills?   — string[] explicit skill chips from UI, merged with LLM-extracted skills
+//   year?     — number[]
+//   branch?   — string[]
+//   activity? — "high" | "medium" | "low"
+//   limit?    — integer, default 20
+//   debug?    — "summary" | "full"
+//
+// Behaviour:
+//   no query, domains selected → structured search within selected domains
+//   query provided, no domains → pure semantic (Voyage domain relevance, all users)
+//   query + domains selected  → domain gate applied first, then semantic ranking within that pool
+exports.unifiedSearchHandler = async (req, res) => {
+  try {
+    const {
+      query,
+      domains:  domainsParam  = [],
+      skills:   skillsParam   = [],
+      year:     yearParam      = [],
+      branch:   branchParam    = [],
+      activity: activityParam,
+      limit,
+      debug,
+    } = req.body;
+
+    // ── Validate domains ──
+    const filterDomains = domainsParam.map(d => d.toString().trim().toLowerCase()).filter(Boolean);
+    const unknownDomains = filterDomains.filter(d => !DOMAIN_SET.has(d));
+    if (unknownDomains.length) {
+      return res.status(400).json({ message: `Unknown domain(s): ${unknownDomains.join(", ")}`, valid: [...DOMAIN_SET] });
+    }
+
+    // ── Validate activity ──
+    const activity = activityParam ? activityParam.trim().toLowerCase() : null;
+    if (activity && !VALID_ACTIVITY.has(activity)) {
+      return res.status(400).json({ message: "activity must be high, medium, or low" });
+    }
+
+    // ── Validate limit ──
+    let parsedLimit = DEFAULT_LIMIT;
+    if (limit !== undefined) {
+      parsedLimit = parseInt(limit, 10);
+      if (isNaN(parsedLimit) || parsedLimit < 1) {
+        return res.status(400).json({ message: "limit must be a positive integer" });
+      }
+      parsedLimit = Math.min(parsedLimit, MAX_LIMIT);
+    }
+
+    // ── Validate debug ──
+    if (debug !== undefined && !VALID_DEBUG.has(debug)) {
+      return res.status(400).json({ message: "debug must be summary, full, or true" });
+    }
+
+    // ── Explicit skills from UI chips ──
+    const explicitSkills = skillsParam.map(s => s.toString().trim().toLowerCase()).filter(Boolean);
+
+    // ── Years and branches ──
+    const years    = yearParam.map   ? yearParam.map(y => parseInt(y, 10)).filter(y => !isNaN(y) && y >= 1 && y <= 4) : [];
+    const branches = branchParam.map ? branchParam.map(b => b.toString().trim().toUpperCase()).filter(Boolean) : [];
+
+    // ── Query parsing (only if query provided) ──
+    let skills         = explicitSkills;
+    let domainRelevance;
+    let topDomains     = filterDomains;
+    let domainConfidences;
+    let extractionMethod = "none";
+
+    const hasQuery = query && typeof query === "string" && query.trim().length > 0;
+    if (hasQuery) {
+      if (query.length > 2000) {
+        return res.status(400).json({ message: "query must not exceed 2000 characters" });
+      }
+      const parsed = await parseJDQuery(query.trim());
+      skills           = [...new Set([...parsed.skills, ...explicitSkills])];
+      domainRelevance  = parsed.domainRelevance;
+      topDomains       = parsed.topDomains;
+      domainConfidences= parsed.domainConfidences;
+      extractionMethod = parsed.extractionMethod;
+    }
+
+    const result = await searchUsers({
+      skills,
+      domains:        filterDomains,
+      domainRelevance,
+      years,
+      branches,
+      activity,
+      limit:   parsedLimit,
+      debug:   debug || false,
+    });
+
+    return res.json({
+      queryInterpretation: {
+        hasQuery,
+        extractedSkills:    skills,
+        filterDomains,
+        topDomains,
+        domainRelevance,
+        domainConfidences,
+        extractionMethod,
+      },
+      ...result,
+    });
+
+  } catch (err) {
+    console.error("Unified search error:", err.message);
+    return res.status(500).json({ message: "Search failed" });
+  }
+};
+
 // ── POST /search/semantic ─────────────────────────────────────────────────────
 // Body: { query, limit?, debug? }
 // Parses a free-text recruiter JD into skills + domains, then delegates to searchUsers.
@@ -130,7 +245,7 @@ exports.semanticSearchHandler = async (req, res) => {
     }
 
     // Parse JD into skills + domain relevance vector
-    const { skills, domainRelevance, topDomains, domainConfidences, queryIntent, extractionMethod } =
+    const { skills, domainRelevance, topDomains, domainConfidences, extractionMethod } =
       await parseJDQuery(query.trim());
 
     // Delegate to ranking engine — passes domainRelevance vector for dot-product scoring
@@ -147,7 +262,6 @@ exports.semanticSearchHandler = async (req, res) => {
         topDomains,
         domainRelevance,
         domainConfidences,
-        queryIntent,
         extractionMethod,
       },
       ...result,

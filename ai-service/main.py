@@ -225,6 +225,24 @@ async def parse_resume(file: UploadFile):
             skill_norm._categorize(proj_skills),
         )
 
+    # Achievements section: token-level + text extraction (same as skills section)
+    if "achievements" in sections:
+        import re as _re
+        ach_text = " ".join(sections["achievements"])
+        ach_tokens = _re.split(r"[,|·•/\n\t\[\]()\s]+", ach_text)
+        ach_token_skills = skill_norm.extract_from_tokens(ach_tokens)
+        for display in ach_token_skills:
+            cat = skill_norm.categorize_display(display)
+            if cat and cat in categorized:
+                if display not in categorized[cat]:
+                    categorized[cat].append(display)
+        # Also run text keyword matching on achievements
+        ach_text_skills = skill_norm.extract_from_text(ach_text)
+        categorized = skill_norm.merge_skills(
+            categorized,
+            skill_norm._categorize(ach_text_skills),
+        )
+
     normalized_skills = skill_norm.build_normalized_skills(categorized)
     # Scope unknown-skill detection to the skills section only.
     # Running it against the full text surfaces project/education words, not unlisted skills.

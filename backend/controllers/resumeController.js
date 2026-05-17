@@ -5,19 +5,32 @@ const { DOMAIN_LIST } = require("../constants/domains");
 
 const RESUME_PARSER_URL = process.env.RESUME_PARSER_URL || "http://localhost:8000";
 
-// ── Merge helpers ─────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-function mergeSkills(existing, resume) {
-  const cats = ["languages", "frameworks", "libraries", "databases", "tools"];
-  const result = {};
-  for (const cat of cats) {
-    result[cat] = [...new Set([...(existing[cat] || []), ...(resume[cat] || [])])];
+// Flatten categorized github skills into a normalized set (github-only source of truth).
+function buildGithubNormalizedSkills(skills) {
+  const all = new Set();
+  for (const arr of Object.values(skills || {})) {
+    for (const s of arr) {
+      if (s) all.add(s.toLowerCase());
+    }
   }
-  return result;
+  return [...all].sort();
 }
 
-function mergeNormalizedSkills(existing, resume) {
-  return [...new Set([...existing, ...resume])];
+// Merge resume skills (ontology-matched) + unknown raw skills into one flat list.
+// Unknown skills are kept lowercase so they can match JD extraction output exactly.
+function buildResumeNormalizedSkills(normalizedSkills, unknownSkills) {
+  const all = new Set();
+  for (const s of normalizedSkills || []) {
+    if (s) all.add(s.toLowerCase());
+  }
+  for (const s of unknownSkills || []) {
+    const clean = s.toLowerCase().trim();
+    // Skip very short tokens or obvious noise
+    if (clean.length >= 2 && clean.length <= 40) all.add(clean);
+  }
+  return [...all].sort();
 }
 
 function mergeDomainScores(githubMap, resumeScores) {
@@ -42,7 +55,7 @@ function computeTopDomains(mergedScores) {
     .map(([domain, score]) => ({ domain, score }));
 }
 
-// ── Controller ────────────────────────────────────────────────────────────────
+// ── Upload controller ─────────────────────────────────────────────────────────
 
 async function uploadResume(req, res) {
   if (!req.file) {
@@ -70,37 +83,54 @@ async function uploadResume(req, res) {
         detail: `Resume parsing service error: ${err.response.data?.detail || "unknown"}`,
       });
     }
-    // Network error / timeout
     return res.status(502).json({ detail: "Resume parsing service unavailable" });
   }
 
-  // Merge into User document
+  // Persist into User document
   try {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    user.skills         = mergeSkills(user.skills, parseResult.skills);
-    user.normalizedSkills = mergeNormalizedSkills(user.normalizedSkills, parseResult.normalizedSkills);
+    // ── Resume skills — stored separately from GitHub skills ──────────────────
+    // parseResult.skills  → ontology-matched, categorized
+    // parseResult.unknownSkills → raw tokens not in ontology (e.g. "dsa", "pen testing")
+    user.resumeSkills = parseResult.skills;
+    user.resumeNormalizedSkills = buildResumeNormalizedSkills(
+      parseResult.normalizedSkills,
+      parseResult.unknownSkills,
+    );
 
-    // Merge against pure GitHub domain scores, not the accumulated profile vector.
-    // This ensures re-uploading a resume doesn't compound previous resume scores.
+    // ── GitHub skills stay untouched ──────────────────────────────────────────
+    // normalizedSkills is the github-only flat list; rebuild it from user.skills
+    // so a resume re-upload never compounds resume tokens into the github set.
+    user.normalizedSkills = buildGithubNormalizedSkills(user.skills);
+
+    // ── Domain scores: merge github (0.6) + resume (0.4) ─────────────────────
+    // Always merge against pure github domain scores, not the accumulated vector,
+    // so re-uploading a resume doesn't compound previous resume scores.
     const githubDomainScores = user.githubData?.domainScores ?? {};
-    const mergedScores  = mergeDomainScores(githubDomainScores, parseResult.domainScores);
-    // Persist merged scores back into the Map
+    const mergedScores = mergeDomainScores(githubDomainScores, parseResult.domainScores);
     for (const [domain, score] of Object.entries(mergedScores)) {
       user.domainScores.set(domain, score);
     }
 
     const newTopDomains = computeTopDomains(mergedScores);
-    // Preserve metrics from existing topDomains where available
     user.topDomains = newTopDomains.map(({ domain, score }) => {
       const existing = user.topDomains.find(d => d.domain === domain);
       return { domain, score, metrics: existing?.metrics ?? {} };
     });
 
+    // ── Store original file for download ──────────────────────────────────────
+    user.resumeFile = {
+      data:         req.file.buffer,
+      contentType:  req.file.mimetype,
+      originalName: req.file.originalname,
+    };
+
     user.resumeData = parseResult;
     user.markModified("domainScores");
     user.markModified("resumeData");
+    user.markModified("resumeFile");
 
     await user.save();
 
@@ -108,10 +138,12 @@ async function uploadResume(req, res) {
       message: "Resume processed successfully",
       resumeData: parseResult,
       updatedProfile: {
-        skills:           user.skills,
-        normalizedSkills: user.normalizedSkills,
-        domainScores:     Object.fromEntries(user.domainScores),
-        topDomains:       user.topDomains,
+        skills:                 user.skills,            // github (unchanged)
+        resumeSkills:           user.resumeSkills,
+        normalizedSkills:       user.normalizedSkills,
+        resumeNormalizedSkills: user.resumeNormalizedSkills,
+        domainScores:           Object.fromEntries(user.domainScores),
+        topDomains:             user.topDomains,
       },
     });
   } catch (err) {
@@ -120,4 +152,31 @@ async function uploadResume(req, res) {
   }
 }
 
-module.exports = { uploadResume };
+// ── Download controller ───────────────────────────────────────────────────────
+
+async function downloadResume(req, res) {
+  try {
+    const { githubUsername } = req.params;
+    const user = await User.findOne(
+      { githubUsername },
+      { resumeFile: 1 },
+    );
+
+    if (!user || !user.resumeFile?.data) {
+      return res.status(404).json({ message: "No resume file found for this user" });
+    }
+
+    const { data, contentType, originalName } = user.resumeFile;
+    const safeName = (originalName || "resume").replace(/[^a-zA-Z0-9._-]/g, "_");
+
+    res.set("Content-Type", contentType || "application/octet-stream");
+    res.set("Content-Disposition", `attachment; filename="${safeName}"`);
+    res.set("Content-Length", data.length);
+    return res.send(data);
+  } catch (err) {
+    console.error("Resume download error:", err);
+    return res.status(500).json({ detail: "Failed to retrieve resume file" });
+  }
+}
+
+module.exports = { uploadResume, downloadResume };

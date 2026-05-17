@@ -26,6 +26,25 @@ export const profileApi = {
   get: (githubUsername) => apiFetch(`/users/${githubUsername}/profile`),
 };
 
+export const resumeApi = {
+  download: async (githubUsername) => {
+    const res = await fetch(`/resume/download/${githubUsername}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!res.ok) throw new Error("Resume not available");
+    const blob = await res.blob();
+    const contentDisposition = res.headers.get("Content-Disposition") || "";
+    const match = contentDisposition.match(/filename="([^"]+)"/);
+    const filename = match ? match[1] : `${githubUsername}_resume.pdf`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+};
+
 export const searchApi = {
   /**
    * @param {{ domains?:string[], skills?:string[], years?:number[], branches?:string[], activity?:string, limit?:number }} filters

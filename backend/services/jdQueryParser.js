@@ -280,11 +280,68 @@ function applyIntentBoosts(domainRelevance, intentScores) {
 //         as-is (lowercase) so they still work for $in matching if the candidate has them.
 // Falls back to ontology-only extraction if Groq is unavailable or errors.
 
+// Suffixes that LLMs append to skill names but that the ontology doesn't include.
+// Stripped in order — longest first so "web development" doesn't partially strip "development".
+const STRIP_SUFFIXES = [
+  " web development", " development", " developer", " engineer", " engineering",
+  " programming", " framework", " library", " platform", " tool", " tools",
+  " concepts", " fundamentals", " skills", " knowledge",
+];
+
+// Try normalizeSkillName, then progressively strip common LLM suffixes.
+// Returns the canonical display name (lowercased) or the raw token if nothing matches.
+function canonicalizeToken(raw) {
+  const token = raw.toLowerCase().trim();
+  if (!token) return null;
+
+  // 1. Direct lookup
+  let display = normalizeSkillName(token);
+  if (display) return display.toLowerCase();
+
+  // 2. Strip trailing suffix and retry
+  for (const suffix of STRIP_SUFFIXES) {
+    if (token.endsWith(suffix)) {
+      const stripped = token.slice(0, token.length - suffix.length).trim();
+      display = normalizeSkillName(stripped);
+      if (display) return display.toLowerCase();
+    }
+  }
+
+  // 3. Strip trailing plural 's' as last resort ("rest apis" → "rest api")
+  if (token.endsWith("s")) {
+    display = normalizeSkillName(token.slice(0, -1));
+    if (display) return display.toLowerCase();
+  }
+
+  // 4. Keep as-is — still useful for $in matching if candidate has it
+  return token;
+}
+
 const GROQ_SKILL_PROMPT = `You are a technical skill extractor for a campus hiring platform.
-Extract ALL technical skills, tools, frameworks, programming languages, and domain concepts from the job description below.
-Return ONLY a JSON array of lowercase strings. No explanation, no markdown, no extra text.
-Include conceptual skills (e.g. "penetration testing", "authentication", "data modeling") not just tool names.
-Example output: ["python", "postgresql", "rest api", "penetration testing", "tcp/ip", "authentication"]`;
+
+Extract every specific, matchable skill from the job description — anything concrete enough to appear on a resume and be verified. This includes all technical domains:
+- Languages: python, java, go, rust, c++, typescript
+- Frameworks & libraries: react, pytorch, spring boot, fastapi, langchain
+- Tools & platforms: docker, kubernetes, postgresql, redis, aws, linux, git, wireshark, nmap, burp suite
+- Protocols & standards: tcp/ip, grpc, rest api, websockets, http, tls, oauth
+- Security skills: penetration testing, network security, cryptography, authentication, vulnerability assessment, owasp, firewalls, ids/ips, secure coding
+- Data & ML skills: sql, spark, kafka, feature engineering, model training, mlflow
+- Systems skills: memory management, multithreading, concurrency, posix, kernel programming
+- Any other specific, learnable technical skill from any domain
+
+Strip qualifiers — extract the skill itself:
+- "Linux fundamentals" → "linux"
+- "REST APIs" or "RESTful APIs" → "rest api"
+- "penetration testing basics" → "penetration testing"
+- "TCP/IP networking" → "tcp/ip"
+
+Skip only truly generic labels that cannot be matched to a skill:
+- Domain buckets: "backend", "frontend", "cloud", "web", "mobile"
+- Pure soft skills: "problem solving", "teamwork", "communication"
+- Bare ambiguous letters: "c" alone, "r" alone (but "c++" is fine)
+
+Return ONLY a JSON array of lowercase strings. No explanation, no markdown.
+Example: ["python", "pytorch", "docker", "linux", "rest api", "penetration testing", "tcp/ip"]`;
 
 async function groqExtractSkills(queryText) {
   const raw = await groqChat(
@@ -292,33 +349,50 @@ async function groqExtractSkills(queryText) {
       { role: "system", content: GROQ_SKILL_PROMPT },
       { role: "user",   content: queryText },
     ],
-    { temperature: 0.1, maxTokens: 512 }
+    { temperature: 0.1, maxTokens: 800 }
   );
 
-  // Strip markdown code fences if Groq wraps the JSON
   const clean = raw.replace(/```(?:json)?/gi, "").trim();
   const arr = JSON.parse(clean);
   if (!Array.isArray(arr)) throw new Error("Groq returned non-array");
+  console.log(`[jdQueryParser] LLM raw tokens (${arr.length}):`, arr);
 
-  // Step 2: ontology normalization
-  const normalized = new Set();
+  // Abstract or vague tokens to drop even if the LLM includes them.
+  // This is the single filter — no separate length check, so short but real
+  // language names like "go" (canonicalized from "golang") pass through.
+  const ABSTRACT_TOKENS = new Set([
+    "ai", "ml", "dl", "nlp",
+    "cloud", "automation", "backend", "frontend", "fullstack",
+    "full stack", "software", "programming", "development", "engineering",
+    "algorithms", "data structures", "problem solving", "aptitude",
+    "web", "mobile", "api", "database", "devops", "infrastructure",
+    "ui", "ux", "db", "os",
+    // Single bare language letters — too ambiguous in campus context;
+    // use specific aliases instead ("c++" stays, "c" alone does not)
+    "c", "r",
+  ]);
+
+  const skills = new Set();
   for (const token of arr) {
-    const display = normalizeSkillName(String(token));
-    normalized.add(display ? display.toLowerCase() : String(token).toLowerCase().trim());
+    const c = canonicalizeToken(String(token));
+    if (!c) continue;
+    if (ABSTRACT_TOKENS.has(c)) continue;
+    skills.add(c);
   }
-
-  return [...normalized].filter(Boolean);
+  return [...skills];
 }
 
 // ── Skill extraction ──────────────────────────────────────────────────────────
+// Returns { canonical, expanded }
+// canonical — what to show in UI (missingSkills, extractedSkills)
+// expanded  — superset used for $in DB matching (includes implied technologies)
 
 async function extractSkills(queryText) {
-  // Try Groq first if key is available
   if (process.env.GROQ_API_KEY) {
     try {
-      const llmSkills = await groqExtractSkills(queryText);
-      console.log(`[jdQueryParser] LLM skills (${llmSkills.length}):`, llmSkills);
-      return llmSkills;
+      const skills = await groqExtractSkills(queryText);
+      console.log(`[jdQueryParser] LLM skills (${skills.length}):`, skills);
+      return skills;
     } catch (err) {
       console.warn(`[jdQueryParser] Groq skill extraction failed, falling back to ontology: ${err.message}`);
     }
@@ -351,9 +425,6 @@ function keywordDomains(queryText) {
     domainRelevance[domain] = (rawScores[domain] || 0) / maxHits;
   }
 
-  const intent = classifyQueryIntent(lower);
-  domainRelevance = applyIntentBoosts(domainRelevance, intent.scores);
-
   const topDomains = Object.entries(domainRelevance)
     .filter(([, r]) => r >= KEYWORD_TOP_DOMAIN_THRESHOLD)
     .sort(([, a], [, b]) => b - a)
@@ -363,7 +434,6 @@ function keywordDomains(queryText) {
     domainRelevance,
     topDomains,
     domainConfidences: domainRelevance,
-    queryIntent:       intent,
     extractionMethod:  "keyword-only",
   };
 }
@@ -384,22 +454,15 @@ async function semanticDomains(queryText) {
   // Independent sigmoid-based relevance — no softmax, no zero-sum competition.
   const sigsRelevance = querySimsToRelevance(sims);
 
-  const lower  = queryText.toLowerCase();
-  const intent = classifyQueryIntent(lower);
-
-  // Additive intent boosts on top of Voyage signal.
-  const domainRelevance = applyIntentBoosts(sigsRelevance, intent.scores);
-
-  const topDomains = Object.entries(domainRelevance)
+  const topDomains = Object.entries(sigsRelevance)
     .filter(([, r]) => r >= SEMANTIC_TOP_DOMAIN_THRESHOLD)
     .sort(([, a], [, b]) => b - a)
     .map(([domain]) => domain);
 
   return {
-    domainRelevance,
+    domainRelevance:   sigsRelevance,
     topDomains,
-    domainConfidences: domainRelevance,
-    queryIntent:       intent,
+    domainConfidences: sigsRelevance,
     extractionMethod:  "semantic",
   };
 }

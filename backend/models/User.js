@@ -123,9 +123,31 @@ const userSchema = new mongoose.Schema({
   domainScores: { type: Map, of: Number, default: {} },
 
   // Flattened, lowercased skill tokens for fast $in retrieval during search.
-  // Union of skills.languages + frameworks + libraries + databases + tools.
-  // Rebuilt on every GitHub fetch — do not edit manually.
+  // Rebuilt on every GitHub fetch from skills.* — do not edit manually.
+  // GitHub-only: resume skills are stored separately in resumeNormalizedSkills.
   normalizedSkills: { type: [String], default: [] },
+
+  // ── Resume skills (kept separate from GitHub skills) ─────────────────────────
+  // Categorized skills extracted by the Python resume parser.
+  resumeSkills: {
+    languages:  { type: [String], default: [] },
+    frameworks: { type: [String], default: [] },
+    libraries:  { type: [String], default: [] },
+    databases:  { type: [String], default: [] },
+    tools:      { type: [String], default: [] },
+  },
+
+  // Flattened resume skill tokens for $in matching during search.
+  // Includes ontology-matched display names + raw unknown skills from resume
+  // (e.g. "dsa", "penetration testing") that may not be in the ontology.
+  resumeNormalizedSkills: { type: [String], default: [] },
+
+  // Original uploaded resume file stored for download.
+  resumeFile: {
+    data:         Buffer,
+    contentType:  String,
+    originalName: String,
+  },
 
   // Full structured output from the Resume Intelligence microservice.
   // Stored as Mixed to avoid schema coupling with the Python service response.
@@ -146,6 +168,7 @@ userSchema.index({ "topDomains.domain": 1 });
 userSchema.index({ activityScore: -1 });
 // Normalized skills — for broad $in candidate retrieval during search
 userSchema.index({ normalizedSkills: 1 });
+userSchema.index({ resumeNormalizedSkills: 1 });
 // Domain score indexes — for recruiter / faculty filtering on non-top-5 domains
 userSchema.index({ "domainScores.mlops":               1 });
 userSchema.index({ "domainScores.cybersecurity":       1 });

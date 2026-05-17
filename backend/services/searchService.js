@@ -3,17 +3,20 @@ const { buildSkillWeightMap, SKILL_WEIGHTS } = require("../constants/skillWeight
 const { DOMAIN_INTEREST_MAP } = require("../constants/domains");
 
 // ── Architecture ───────────────────────────────────────────────────────────────
-// Structured path  (GET /search/users):
-//   Stage 1 — Domain threshold pre-filter  (MongoDB, hard gate, $gte DOMAIN_THRESHOLD)
-//   Stage 2 — Broad skill candidate retrieval (MongoDB, $in on normalizedSkills)
-//   Stage 3 — Skill coverage score
-//   Stage 4 — Final ranking  (0.30 skill + 0.55 domain + 0.15 activity)
+// Filtering and ranking are now independent:
 //
-// Semantic path  (POST /search/semantic):
-//   Stage 1 — No domain gate — scan all github/resume users; skill $in if any
-//   Stage 2 — Dot-product domain ranking: Σ(user.domainScore[d] × queryRelevance[d])
-//   Stage 3 — Final ranking  (0.30 skill + 0.55 dot-product + 0.15 activity)
-//             Multi-domain co-activation — hybrid candidates naturally outscore pure specialists
+// Filtering (MongoDB, always applied if provided):
+//   domains[]       → hard domain threshold gate ($gte DOMAIN_THRESHOLD), from UI selection
+//   skills[]        → $in on normalizedSkills
+//
+// Ranking (determined by what was parsed from the query):
+//   domainRelevance → dot-product: Σ(tanh(user[d]/scale) × queryRelevance[d]) — semantic path
+//   (none)          → structured: 0.7 × max + 0.3 × avg tanh-scaled domain scores
+//
+// Combined (POST /search, unified endpoint):
+//   domains from UI → filter first (hard gate)
+//   query present   → Voyage/Groq domain relevance for dot-product ranking within that pool
+//   query absent    → structured domain scoring within that pool
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SEARCH_DEFAULTS      = { limit: 20, MAX_LIMIT: 50 };
@@ -83,7 +86,11 @@ function computeSkillInfo(user, requestedSkills) {
     return { score: 1, matched: [], missing: [], matchedCount: 0, requestedCount: 0, matchedWeight: 0, totalWeight: 0, weights: {} };
   }
 
-  const candidateSkills = new Set(user.normalizedSkills || []);
+  // Union GitHub skills + resume skills (including ontology-unknown tokens like "dsa")
+  const candidateSkills = new Set([
+    ...(user.normalizedSkills       || []),
+    ...(user.resumeNormalizedSkills || []),
+  ]);
   const weights         = buildSkillWeightMap(requestedSkills);
   const matched = [];
   const missing = [];
@@ -113,22 +120,48 @@ function computeSkillInfo(user, requestedSkills) {
   };
 }
 
-// ── Semantic dot-product domain scoring ───────────────────────────────────────
+// ── Unified domain scoring (semantic path) ────────────────────────────────────
 //
-// Computes Σ(tanh(user.domainScore[d] / scale) × queryRelevance[d]) / Σ(queryRelevance[d])
-// Both factors are in [0,1], result is in [0,1].
-// A balanced candidate (backend:80 + devops:70 + systems:40) outscores a pure specialist
-// (systems:100) when the query has mixed infra relevance — correct for hybrid role JDs.
-function computeSemanticDomainScore(user, domainRelevance) {
-  let dotProduct     = 0;
-  let relevanceTotal = 0;
+// Same principle as the structured path's 0.7 × max + 0.3 × avg formula, but
+// generalised to continuous relevance weights instead of uniform weights.
+//
+// For each active domain:
+//   val[d] = tanh(user[d] / scale) × rel[d]          — relevance-weighted contribution
+//
+// max_term = max(val[d]) / max(rel[d])                — normalised peak (≤ 1)
+//            "how strong is the user in the most relevant domain they shine in?"
+// avg_term = Σ(val[d]) / Σ(rel[d])                   — relevance-weighted average (≤ 1)
+//            "how broadly does the user cover what the query cares about?"
+//
+// score = 0.7 × max_term + 0.3 × avg_term
+//
+// activeDomains: domains where ≥ 1 candidate has score ≥ DOMAIN_THRESHOLD.
+// Dead dimensions (e.g. "systems" with relevance=1.0 but no user scores) are excluded
+// so they don't inflate the denominator for every candidate uniformly.
+function computeSemanticDomainScore(user, domainRelevance, activeDomains) {
+  let maxVal   = 0;
+  let maxRel   = 0;
+  let dotSum   = 0;
+  let relTotal = 0;
+
   for (const [domain, relevance] of Object.entries(domainRelevance)) {
+    if (!activeDomains.has(domain)) continue;
     const raw    = getDomainScore(user, domain);
     const scaled = Math.tanh(raw / DOMAIN_TANH_SCALE);
-    dotProduct     += scaled * relevance;
-    relevanceTotal += relevance;
+    const val    = scaled * relevance;
+
+    if (val > maxVal)       maxVal = val;
+    if (relevance > maxRel) maxRel = relevance;
+    dotSum   += val;
+    relTotal += relevance;
   }
-  return relevanceTotal > 0 ? dotProduct / relevanceTotal : 0;
+
+  if (relTotal === 0) return 0;
+
+  const normalizedMax = maxRel > 0 ? maxVal / maxRel : 0;
+  const weightedAvg   = dotSum / relTotal;
+
+  return 0.7 * normalizedMax + 0.3 * weightedAvg;
 }
 
 // ── Activity normalization ─────────────────────────────────────────────────────
@@ -216,22 +249,8 @@ function buildWhyMatched(user, requestedDomains, requestedSkills, skillInfo) {
     .sort((a, b) => (b.score || 0) - (a.score || 0))
     .map(d => d.domain);
 
-  // ── 2. Matched skills (query-scoped, max 5) ──
-  //    Fill any remaining slots with highest-weight user skills not in the query.
-  const matchedSet   = new Set(skillInfo.matched);
+  // ── 2. Matched skills (query-scoped) ──
   const matchedSkills = [...skillInfo.matched];
-
-  if (matchedSkills.length < 5) {
-    const filler = (user.normalizedSkills || [])
-      .filter(s => !matchedSet.has(s))
-      .map(s => ({ skill: s, weight: SKILL_WEIGHTS[s] ?? 1.0 }))
-      .sort((a, b) => b.weight - a.weight);
-
-    for (const { skill } of filler) {
-      if (matchedSkills.length >= 5) break;
-      matchedSkills.push(skill);
-    }
-  }
 
   // ── 3. Semantic summary (template — no LLM, no repo lookup) ──
   const topTwo = (user.topDomains || [])
@@ -254,7 +273,7 @@ function buildWhyMatched(user, requestedDomains, requestedSkills, skillInfo) {
     semanticSummary += ".";
   }
 
-  return { matchedDomains, matchedSkills, missingSkills: skillInfo.missing, semanticSummary };
+  return { matchedDomains, matchedSkills, semanticSummary };
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────
@@ -279,13 +298,13 @@ const ACTIVITY_RANGES = {
 exports.searchUsers = async ({
   skills         = [],
   domains        = [],
-  domainRelevance,           // semantic path — Record<domain, relevance>
+  domainRelevance,
   role,
-  years          = [],
-  branches       = [],
-  activity       = null,
-  limit          = SEARCH_DEFAULTS.limit,
-  debug          = false,
+  years               = [],
+  branches            = [],
+  activity            = null,
+  limit               = SEARCH_DEFAULTS.limit,
+  debug               = false,
 }) => {
   const isSemanticPath = domainRelevance !== undefined && Object.keys(domainRelevance).length > 0;
   const safeLimit      = Math.min(limit, SEARCH_DEFAULTS.MAX_LIMIT);
@@ -297,9 +316,10 @@ exports.searchUsers = async ({
     false;
 
   // Base filter: GitHub profile OR resume uploaded (both are valid talent signals).
+  // Also exclude records where githubUsername was stored as the literal string "undefined".
   const dbQuery = {
     $or: [
-      { githubUsername: { $exists: true, $ne: null } },
+      { githubUsername: { $exists: true, $ne: null, $nin: ["undefined", ""] } },
       { resumeData:     { $ne: null } },
     ],
   };
@@ -310,24 +330,17 @@ exports.searchUsers = async ({
     dbQuery.activityScore = ACTIVITY_RANGES[activity];
   }
 
-  if (isSemanticPath) {
-    // Semantic path: NO domain threshold gate.
-    // Dot-product ranking surfaces relevant candidates regardless of domain membership.
-    // Skill $in filter still narrows the pool when skills are specified.
-    if (normalizedReqs.length) {
-      dbQuery.normalizedSkills = { $in: normalizedReqs };
-    }
-  } else {
-    // Structured path: hard domain threshold gate (preserves existing behaviour).
-    if (domains.length) {
-      dbQuery.$or = domains.map(domain => ({
-        [`domainScores.${domain}`]: { $gte: DOMAIN_THRESHOLD },
-      }));
-    }
-    if (normalizedReqs.length) {
-      dbQuery.normalizedSkills = { $in: normalizedReqs };
-    }
+  // Domain filter: always applied when domains are explicitly provided (from UI selection).
+  // Independent of whether we're in semantic or structured ranking mode.
+  if (domains.length) {
+    dbQuery.$or = domains.map(domain => ({
+      [`domainScores.${domain}`]: { $gte: DOMAIN_THRESHOLD },
+    }));
   }
+  // Skills are used only in ranking (skill score), not as a hard MongoDB gate.
+  // A hard $in filter combined with narrow domain gates produces empty results
+  // for niche queries (e.g. cybersecurity) where domain-matched users may not
+  // have every extracted skill stored in normalizedSkills.
 
   // In debug mode run extra counts for pipeline stats
   let countAllGithub   = null;
@@ -342,28 +355,29 @@ exports.searchUsers = async ({
     if (role) afterRoleQuery.role = role;
     countAfterRole = await User.countDocuments(afterRoleQuery);
 
-    if (!isSemanticPath && domains.length) {
+    if (domains.length) {
       countAfterDomain = await User.countDocuments({
         ...afterRoleQuery,
         $or: domains.map(d => ({ [`domainScores.${d}`]: { $gte: DOMAIN_THRESHOLD } })),
       });
     } else {
-      countAfterDomain = countAfterRole; // semantic path has no domain gate
+      countAfterDomain = countAfterRole;
     }
   }
 
   const users = await User.find(dbQuery, {
-    name:             1,
-    githubUsername:   1,
-    branch:           1,
-    year:             1,
-    role:             1,
-    interests:        1,
-    skills:           1,
-    normalizedSkills: 1,
-    topDomains:       1,
-    domainScores:     1,
-    activityScore:    1,
+    name:                   1,
+    githubUsername:         1,
+    branch:                 1,
+    year:                   1,
+    role:                   1,
+    interests:              1,
+    skills:                 1,
+    normalizedSkills:       1,
+    resumeNormalizedSkills: 1,
+    topDomains:             1,
+    domainScores:           1,
+    activityScore:          1,
     // raw activity components (present when GitHub sync has run)
     repoCount:        1,
     commitCount:      1,
@@ -376,10 +390,24 @@ exports.searchUsers = async ({
   const countAfterSkill = users.length;
 
   // ── Stage 3 + 4: Score and rank ──
-  // Derive topDomains list for whyMatched on the semantic path
+
+  // Domains where at least one candidate has a meaningful score.
+  // Used to exclude dead dimensions (e.g. "systems" with relevance=1.0 but no user
+  // has a systems score) from the semantic dot-product denominator.
+  const activeDomains = new Set();
+  if (isSemanticPath) {
+    for (const u of users) {
+      for (const domain of Object.keys(domainRelevance)) {
+        if (getDomainScore(u, domain) >= DOMAIN_THRESHOLD) activeDomains.add(domain);
+      }
+    }
+  }
+
+  // Derive topDomains list for whyMatched on the semantic path.
+  // Use activeDomains intersection so only populated domains appear.
   const queryTopDomains = isSemanticPath
     ? Object.entries(domainRelevance)
-        .filter(([, r]) => r >= 0.45)
+        .filter(([d, r]) => activeDomains.has(d) && r > 0)
         .sort(([, a], [, b]) => b - a)
         .map(([d]) => d)
         .slice(0, 6)
@@ -388,7 +416,7 @@ exports.searchUsers = async ({
   const scoredUsers = users.map(u => {
     if (isSemanticPath) {
       const skillInfo    = computeSkillInfo(u, normalizedReqs);
-      const domainScore  = computeSemanticDomainScore(u, domainRelevance);
+      const domainScore  = computeSemanticDomainScore(u, domainRelevance, activeDomains);
       const activityInfo = computeActivityInfo(u);
       const weights      = pickWeights(normalizedReqs.length > 0, true);
       const finalScore   =
@@ -421,6 +449,7 @@ exports.searchUsers = async ({
   console.log("\n========== SEARCH DEBUG ==========");
   console.log("Debug mode       :", debugMode || "off");
   console.log("Search path      :", isSemanticPath ? "semantic (dot-product)" : "structured (domain filter)");
+  if (isSemanticPath) console.log("Active domains   :", [...activeDomains].sort());
   console.log("Requested Domains:", isSemanticPath ? queryTopDomains : domains);
   console.log("Requested Skills :", normalizedReqs);
   console.log("FINAL QUERY      :", JSON.stringify(dbQuery, null, 2));
@@ -464,7 +493,6 @@ exports.searchUsers = async ({
       result.skillDebug = {
         requestedSkills:      normalizedReqs,
         matchedSkills:        ranking.skillInfo.matched,
-        missingSkills:        ranking.skillInfo.missing,
         matchedCount:         ranking.skillInfo.matchedCount,
         requestedCount:       ranking.skillInfo.requestedCount,
         matchedWeight:        +ranking.skillInfo.matchedWeight.toFixed(3),
@@ -528,7 +556,7 @@ exports.searchUsers = async ({
       requestedDomains: isSemanticPath ? queryTopDomains : domains,
       requestedSkills:  normalizedReqs,
       role:             role || null,
-      domainThreshold:  isSemanticPath ? "none (dot-product)" : DOMAIN_THRESHOLD,
+      domainThreshold:  domains.length ? DOMAIN_THRESHOLD : "none (no domain filter applied)",
       candidateReduction: {
         allGithubUsers:   countAllGithub   ?? countAfterSkill,
         afterRoleFilter:  countAfterRole   ?? countAfterSkill,
