@@ -71,6 +71,7 @@ const userSchema = new mongoose.Schema({
     totalCommits: { type: Number, default: 0 },   // populated when githubService exposes it
     totalPRs:     { type: Number, default: 0 },   // populated when githubService exposes it
     activeDays:   { type: Number, default: 0 },   // populated when githubService exposes it
+    teamworkScore:{ type: Number, default: 0 },   // teamwork score based on collaboration
 
     // Breakdown of repo classifications from Phase 1 of githubService
     repoTypeCounts: {
@@ -152,6 +153,14 @@ const userSchema = new mongoose.Schema({
   // Full structured output from the Resume Intelligence microservice.
   // Stored as Mixed to avoid schema coupling with the Python service response.
   resumeData: { type: mongoose.Schema.Types.Mixed, default: null },
+
+  // Cached stats from Mock Interviews
+  mockInterviewStats: {
+    totalInterviews: { type: Number, default: 0 },
+    avgOverallScore: { type: Number, default: 0 },
+    avgDsaScore: { type: Number, default: 0 },
+    avgCommunicationScore: { type: Number, default: 0 }
+  },
 
 }, { timestamps: true });
 

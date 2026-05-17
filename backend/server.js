@@ -16,7 +16,8 @@ const ontologyRoutes       = require("./routes/ontology");
 const resumeRoutes         = require("./routes/resume");
 const pipelineRoutes       = require("./routes/pipeline");
 const interviewRoutes      = require("./routes/interview");
-
+const driveRoutes          = require("./routes/drive");
+const analyticsRoutes      = require("./routes/analytics");
 // ── App init ───────────────────────────────────────────────────────────────────
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -43,6 +44,8 @@ app.use("/api/ontology", ontologyRoutes);
 app.use("/resume",      resumeRoutes);
 app.use("/pipeline",    pipelineRoutes);
 app.use("/interview",   interviewRoutes);
+app.use("/drives",      driveRoutes);
+app.use("/analytics",   analyticsRoutes);
 
 // ── 404 handler ────────────────────────────────────────────────────────────────
 app.use((req, res) => {

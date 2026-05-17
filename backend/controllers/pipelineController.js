@@ -9,7 +9,7 @@ const { VALID_STAGES } = Pipeline;
 exports.addToPipeline = async (req, res) => {
   try {
     const recruiterId = req.user.id;
-    const { candidateId, jobTitle, stage, notes, matchSnapshot } = req.body;
+    const { candidateId, jobTitle, stage, notes, matchSnapshot, driveId } = req.body;
 
     if (!candidateId || !jobTitle?.trim()) {
       return res.status(400).json({ message: "candidateId and jobTitle are required" });
@@ -25,10 +25,13 @@ exports.addToPipeline = async (req, res) => {
       return res.status(404).json({ message: "Candidate not found" });
     }
 
+    const filter = { recruiterId, candidateId, jobTitle: jobTitle.trim() };
+    if (driveId) filter.driveId = driveId;
+
     const entry = await Pipeline.findOneAndUpdate(
-      { recruiterId, candidateId, jobTitle: jobTitle.trim() },
+      filter,
       {
-        $setOnInsert: { recruiterId, candidateId, jobTitle: jobTitle.trim(), matchSnapshot: matchSnapshot || null },
+        $setOnInsert: { recruiterId, candidateId, jobTitle: jobTitle.trim(), matchSnapshot: matchSnapshot || null, driveId: driveId || null },
         $set: {
           ...(stage  ? { stage }  : {}),
           ...(notes !== undefined ? { notes } : {}),
@@ -53,7 +56,7 @@ exports.addToPipeline = async (req, res) => {
 exports.getPipeline = async (req, res) => {
   try {
     const recruiterId = req.user.id;
-    const { stage, jobTitle } = req.query;
+    const { stage, jobTitle, driveId } = req.query;
 
     if (stage && !VALID_STAGES.includes(stage)) {
       return res.status(400).json({ message: `stage must be one of: ${VALID_STAGES.join(", ")}` });
@@ -62,10 +65,12 @@ exports.getPipeline = async (req, res) => {
     const filter = { recruiterId };
     if (stage)    filter.stage    = stage;
     if (jobTitle) filter.jobTitle = jobTitle.trim();
+    if (driveId)  filter.driveId  = driveId;
 
     const entries = await Pipeline.find(filter)
       .sort({ updatedAt: -1 })
       .populate("candidateId", "name githubUsername branch year topDomains activityScore normalizedSkills")
+      .populate("driveId", "title company type status")
       .lean();
 
     // Group by jobTitle for UI convenience

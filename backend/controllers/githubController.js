@@ -116,6 +116,7 @@ exports.getGithubData = async (req, res) => {
           repoTypeCounts:  data.repoTypeCounts,
           repoSummaries,
           activityScore:   data.activityScore,
+          teamworkScore:   data.teamworkScore || 0,
           scoringMode:     data.embeddingMode,
           semanticVersion: "v1",
           domainScores:    data.skills || {},

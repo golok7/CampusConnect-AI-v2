@@ -99,4 +99,71 @@ function _parseQuestions(raw) {
   }
 }
 
-module.exports = { generateInterviewQuestions };
+/**
+ * Evaluate mock interview answers using Groq.
+ * 
+ * @param {Array<{question: string, category: string}>} questions 
+ * @param {Array<string>} answers 
+ * @returns {Promise<{ overallScore: number, dsaScore: number, communicationScore: number, feedback: string, history: Array<{question: string, answer: string, score: number, feedback: string}> }>}
+ */
+async function evaluateInterview(questions, answers) {
+  const systemPrompt = `You are a strict but fair senior technical interviewer evaluating a candidate's mock interview.
+Always return valid JSON — no markdown fences, no extra text outside the JSON.`;
+
+  const qnaList = questions.map((q, idx) => `
+Q${idx + 1} (${q.category || "general"}): ${typeof q === "string" ? q : q.question}
+Answer: ${answers[idx] || "No answer provided"}
+`).join("\n");
+
+  const userPrompt = `
+Evaluate the following interview responses.
+
+${qnaList}
+
+Provide scores out of 100 for:
+1. DSA/Technical correctness (dsaScore)
+2. Communication and clarity (communicationScore)
+3. Overall impression (overallScore)
+
+Also provide specific feedback for each question and an overall feedback summary.
+
+Return ONLY this JSON structure:
+{
+  "overallScore": 85,
+  "dsaScore": 80,
+  "communicationScore": 90,
+  "feedback": "Overall feedback summary here.",
+  "history": [
+    {
+      "question": "Question text",
+      "answer": "Candidate's answer",
+      "score": 85,
+      "feedback": "Specific feedback for this answer"
+    }
+  ]
+}`;
+
+  const raw = await groqChat([
+    { role: "system", content: systemPrompt },
+    { role: "user",   content: userPrompt },
+  ], { temperature: 0.2, maxTokens: 1500 });
+
+  return _parseEvaluation(raw);
+}
+
+function _parseEvaluation(raw) {
+  try {
+    const cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
+    return JSON.parse(cleaned);
+  } catch (err) {
+    return {
+      overallScore: 0,
+      dsaScore: 0,
+      communicationScore: 0,
+      feedback: "Failed to parse AI evaluation. " + raw.slice(0, 200),
+      history: []
+    };
+  }
+}
+
+module.exports = { generateInterviewQuestions, evaluateInterview };

@@ -185,6 +185,93 @@ async function getContributorCommits(owner, repo, username) {
   }
 }
 
+async function getCollaboratedRepos(username) {
+  if (!process.env.GITHUB_TOKEN) return [];
+  const query = `
+    query($username: String!) {
+      user(login: $username) {
+        repositoriesContributedTo(first: 30, contributionTypes: [COMMIT, PULL_REQUEST, ISSUE], includeUserRepositories: false) {
+          nodes {
+            name
+            owner { login }
+            stargazerCount
+            description
+            primaryLanguage { name }
+            isFork
+            repositoryTopics(first: 5) {
+              nodes {
+                topic { name }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+  try {
+    const res = await axios.post(
+      "https://api.github.com/graphql",
+      { query, variables: { username } },
+      { headers: githubHeaders() }
+    );
+    if (res.data.errors) {
+      console.warn("[github] GraphQL errors in getCollaboratedRepos:", res.data.errors);
+      return [];
+    }
+    const nodes = res.data.data?.user?.repositoriesContributedTo?.nodes || [];
+    return nodes.map(repo => ({
+      name: repo.name,
+      owner: { login: repo.owner.login },
+      full_name: `${repo.owner.login}/${repo.name}`,
+      description: repo.description,
+      language: repo.primaryLanguage?.name,
+      stargazers_count: repo.stargazerCount,
+      fork: repo.isFork,
+      topics: repo.repositoryTopics?.nodes?.map(n => n.topic.name) || [],
+      size: 1000,
+      pushed_at: new Date().toISOString()
+    }));
+  } catch (err) {
+    console.error("[github] Failed to fetch collaborated repos via GraphQL");
+    return [];
+  }
+}
+
+async function getUserPullRequests(username) {
+  if (!process.env.GITHUB_TOKEN) return [];
+  const query = `
+    query($username: String!) {
+      user(login: $username) {
+        pullRequests(first: 50, states: MERGED, orderBy: {field: CREATED_AT, direction: DESC}) {
+          nodes {
+            title
+            repository {
+              name
+              owner { login }
+              stargazerCount
+            }
+          }
+        }
+      }
+    }
+  `;
+  try {
+    const res = await axios.post(
+      "https://api.github.com/graphql",
+      { query, variables: { username } },
+      { headers: githubHeaders() }
+    );
+    if (res.data.errors) {
+      console.warn("[github] GraphQL errors in getUserPullRequests:", res.data.errors);
+      return [];
+    }
+    return res.data.data?.user?.pullRequests?.nodes || [];
+  } catch (err) {
+    console.error("[github] Failed to fetch PRs via GraphQL");
+    return [];
+  }
+}
+
 module.exports = {
   MAX_PAGES,
   ENRICH_LIMIT,
@@ -196,4 +283,6 @@ module.exports = {
   getDependencies,
   getContributorCommits,
   getRateLimit,
+  getCollaboratedRepos,
+  getUserPullRequests,
 };

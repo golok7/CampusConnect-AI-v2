@@ -65,3 +65,39 @@ exports.getComplementaryUsers = (currentUser, allUsers) => {
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
 };
+
+// Build a vector from a drive's domainScores
+function buildDriveVector(drive) {
+  const raw = ALL_DOMAINS.map(d => {
+    if (drive.domainScores instanceof Map) return drive.domainScores.get(d) || 0;
+    return drive.domainScores?.[d] || 0;
+  });
+  const mag = Math.sqrt(raw.reduce((s, v) => s + v * v, 0));
+  return mag === 0 ? raw : raw.map(v => v / mag);
+}
+
+// Recommend active drives to a user
+exports.getJobRecommendations = (currentUser, activeDrives) => {
+  const vecA = buildVector(currentUser);
+  
+  return activeDrives
+    .map(drive => {
+      const vecB = buildDriveVector(drive);
+      return { drive, score: cosineSimilarity(vecA, vecB) };
+    })
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+};
+
+// Rank candidates for a specific drive
+exports.getRoleMatching = (drive, candidates) => {
+  const vecDrive = buildDriveVector(drive);
+  
+  return candidates
+    .map(candidate => {
+      const vecUser = buildVector(candidate);
+      return { candidate, score: cosineSimilarity(vecDrive, vecUser) };
+    })
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+};

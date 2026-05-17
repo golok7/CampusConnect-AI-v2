@@ -1,4 +1,4 @@
-const { getAllRepos, getReadme, getProfileReadme, getDependencies, getContributorCommits } = require("./github/githubClient");
+const { getAllRepos, getReadme, getProfileReadme, getDependencies, getContributorCommits, getCollaboratedRepos, getUserPullRequests } = require("./github/githubClient");
 const { repoQualityScore, repoImportanceScore, repoRecencyScore, forkContributionScore, forkTier, forkMultiplier } = require("./scoring/repoScoring");
 const { batchEmbedSummaries } = require("./semantic/voyageClient");
 const { voyageToSemanticPrior, computeEmbeddingConfidence, computePriorEntropy, getKeywordRefinements, applyKeywordRefinements, normalizeDomainProbabilities, applyOverlapDampening } = require("./semantic/semanticPipeline");
@@ -73,17 +73,37 @@ function top5(obj) {
 // ================= MAIN =================
 exports.fetchGithubData = async (username) => {
   try {
-    const [allRepos, profileReadme] = await Promise.all([
+    const [allReposRaw, profileReadme, collabRepos, userPRs] = await Promise.all([
       getAllRepos(username),
       getProfileReadme(username),
+      getCollaboratedRepos(username),
+      getUserPullRequests(username),
     ]);
+
+    const allRepos = [...allReposRaw];
+    const allRepoNames = new Set(allRepos.map(r => r.full_name));
+    for (const repo of collabRepos) {
+      if (!allRepoNames.has(repo.full_name)) {
+        allRepos.push(repo);
+        allRepoNames.add(repo.full_name);
+      }
+    }
+
+    let teamworkScore = 0;
+    const prScore = userPRs.length * 2;
+    const collabRepoScore = collabRepos.length * 5;
+    let starBonus = 0;
+    for (const pr of userPRs) {
+      if ((pr.repository?.stargazerCount || 0) > 100) starBonus += 5;
+    }
+    teamworkScore = prScore + collabRepoScore + starBonus;
 
     const repoContributions = {};
     const repoP1Domains     = {};
 
     let skillCounts     = {};
     let forkSkillCounts = {}; // tracks fork-origin contributions for the 35% cap
-    let activityScore  = 0;
+    let activityScore  = teamworkScore;
     let languages      = new Set();
     let totalStars     = 0;
     let processedCount = 0;
@@ -655,6 +675,7 @@ exports.fetchGithubData = async (username) => {
       topDomains,
       domainMetrics,
       activityScore,
+      teamworkScore,
       repoTypeCounts: typeCounts,
       embeddingMode:  embeddingResults ? `semantic+${VOYAGE_MODEL}` : "keyword-only",
       repoDebug:      (isDeepDebug || isDebug) ? Object.values(repoDebug) : [],
