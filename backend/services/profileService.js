@@ -213,11 +213,12 @@ exports.getProfile = async (githubUsername) => {
       topDomains:       1,
       domainScores:     1,
       activityScore:    1,
-      "githubData.repoSummaries":  1,
-      "githubData.totalRepos":     1,
-      "githubData.stars":          1,
-      "githubData.totalCommits":   1,
-      "githubData.repoTypeCounts": 1,
+      "githubData.repoSummaries":          1,
+      "githubData.totalRepos":             1,
+      "githubData.stars":                  1,
+      "githubData.totalCommits":           1,
+      "githubData.repoTypeCounts":         1,
+      "githubData.collaborationData":      1,
       // Only need existence check — don't send full blob to frontend
       resumeData:                  1,
     }
@@ -243,6 +244,7 @@ exports.getProfile = async (githubUsername) => {
     skillEvidence,
     domainEvidence: { topDomains, domainEvidence },
     contributionStats,
-    hasResume:      !!user.resumeData,
+    hasResume:          !!user.resumeData,
+    collaborationData:  user.githubData?.collaborationData ?? null,
   };
 };

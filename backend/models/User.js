@@ -101,6 +101,17 @@ const userSchema = new mongoose.Schema({
     // Weighted repo activity score (sum of repoActivityScore × typeWeight)
     activityScore: { type: Number, default: 0 },
 
+    // ── Collaboration intelligence ─────────────────────────────────────────
+    collaborationData: {
+      totalPRs:            { type: Number, default: 0 },
+      mergedPRs:           { type: Number, default: 0 },
+      mergeRate:           { type: Number, default: 0 }, // 0.0–1.0
+      collaboratedRepos:   { type: Number, default: 0 }, // repos where user is contributor, not owner
+      uniqueCollaborators: { type: Number, default: 0 }, // unique people who co-work on user's repos
+      collaborationScore:  { type: Number, default: 0 }, // 0–100
+      teamworkScore:       { type: Number, default: 0 }, // 0–100
+    },
+
     // Scoring pipeline used: "semantic+voyage-4-lite" or "keyword-only"
     scoringMode: { type: String, default: "keyword-only" },
 

@@ -1,55 +1,109 @@
 const User = require("../models/User");
 const MockInterview = require("../models/MockInterview");
-const { generateInterviewQuestions, evaluateInterview } = require("../services/interviewService");
+const {
+  startInterview,
+  submitAnswer,
+  getSession,
+  listSessions,
+  abandonSession,
+  evaluateInterview,
+} = require("../services/interviewService");
 
-// ── POST /interview/questions ──────────────────────────────────────────────────
-// Body: { candidateId, jobDescription, matchedSkills?, missingSkills? }
-//
-// matchedSkills / missingSkills can be passed directly from a search result's
-// whyMatched field to avoid a round-trip. If omitted they default to empty arrays.
-exports.getInterviewQuestions = async (req, res) => {
+function handleError(res, err) {
+  console.error("Interview error:", err.message);
+  const status = err.status || (err.message.includes("Groq") ? 502 : 500);
+  res.status(status).json({ message: err.message || "Interview service error" });
+}
+
+// ── POST /interview/session/start ─────────────────────────────────────────────
+// Body: { candidateId, jobDescription, matchedSkills?, missingSkills?, totalQuestions? }
+exports.startSession = async (req, res) => {
   try {
-    const { candidateId, jobDescription, matchedSkills = [], missingSkills = [] } = req.body;
+    const {
+      candidateId,
+      jobDescription,
+      matchedSkills  = [],
+      missingSkills  = [],
+      totalQuestions = 8,
+    } = req.body;
 
-    if (!candidateId) {
-      return res.status(400).json({ message: "candidateId is required" });
-    }
-
-    if (!jobDescription || typeof jobDescription !== "string" || jobDescription.trim().length < 20) {
+    if (!candidateId) return res.status(400).json({ message: "candidateId is required" });
+    if (!jobDescription || jobDescription.trim().length < 20) {
       return res.status(400).json({ message: "jobDescription must be at least 20 characters" });
     }
-
-    if (jobDescription.length > 3000) {
-      return res.status(400).json({ message: "jobDescription must not exceed 3000 characters" });
+    if (totalQuestions < 4 || totalQuestions > 15) {
+      return res.status(400).json({ message: "totalQuestions must be between 4 and 15" });
     }
 
     const candidate = await User.findById(candidateId)
-      .lean()
-      .select("name normalizedSkills topDomains activityScore resumeData");
+      .select("name normalizedSkills resumeNormalizedSkills topDomains activityScore resumeData")
+      .lean();
 
-    if (!candidate) {
-      return res.status(404).json({ message: "Candidate not found" });
-    }
+    if (!candidate) return res.status(404).json({ message: "Candidate not found" });
 
-    const result = await generateInterviewQuestions(
+    const result = await startInterview(
+      req.user.id,
       candidate,
       jobDescription.trim(),
       matchedSkills,
       missingSkills,
+      totalQuestions,
     );
 
-    return res.json({
-      candidateId,
-      candidateName: candidate.name,
-      questions: result.questions,
-    });
-
+    return res.status(201).json(result);
   } catch (err) {
-    console.error("Interview questions error:", err.message);
-    const isGroqError = err.message.includes("Groq") || err.message.includes("GROQ");
-    return res.status(isGroqError ? 502 : 500).json({
-      message: isGroqError ? "AI service unavailable — try again shortly" : "Failed to generate questions",
-    });
+    handleError(res, err);
+  }
+};
+
+// ── POST /interview/session/:sessionId/answer ─────────────────────────────────
+// Body: { answer }
+exports.submitAnswer = async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { answer } = req.body;
+
+    if (!answer || typeof answer !== "string" || answer.trim().length < 1) {
+      return res.status(400).json({ message: "answer is required" });
+    }
+    if (answer.length > 5000) {
+      return res.status(400).json({ message: "answer must not exceed 5000 characters" });
+    }
+
+    const result = await submitAnswer(sessionId, req.user.id, answer);
+    return res.json(result);
+  } catch (err) {
+    handleError(res, err);
+  }
+};
+
+// ── GET /interview/session/:sessionId ─────────────────────────────────────────
+exports.getSession = async (req, res) => {
+  try {
+    const session = await getSession(req.params.sessionId, req.user.id);
+    return res.json(session);
+  } catch (err) {
+    handleError(res, err);
+  }
+};
+
+// ── GET /interview/sessions ───────────────────────────────────────────────────
+exports.listSessions = async (req, res) => {
+  try {
+    const sessions = await listSessions(req.user.id);
+    return res.json({ sessions });
+  } catch (err) {
+    handleError(res, err);
+  }
+};
+
+// ── PATCH /interview/session/:sessionId/abandon ───────────────────────────────
+exports.abandonSession = async (req, res) => {
+  try {
+    const result = await abandonSession(req.params.sessionId, req.user.id);
+    return res.json(result);
+  } catch (err) {
+    handleError(res, err);
   }
 };
 

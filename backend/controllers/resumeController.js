@@ -2,6 +2,7 @@ const axios     = require("axios");
 const FormData  = require("form-data");
 const User      = require("../models/User");
 const { DOMAIN_LIST } = require("../constants/domains");
+const { analyseResumeVsJD } = require("../services/resumeImprovementService");
 
 const RESUME_PARSER_URL = process.env.RESUME_PARSER_URL || "http://localhost:8000";
 
@@ -179,4 +180,33 @@ async function downloadResume(req, res) {
   }
 }
 
-module.exports = { uploadResume, downloadResume };
+// ── Improve controller ────────────────────────────────────────────────────────
+// POST /resume/improve
+// Body: { jobDescription } — analyses logged-in user's profile vs the JD
+
+async function improveResume(req, res) {
+  try {
+    const { jobDescription } = req.body;
+    if (!jobDescription || jobDescription.trim().length < 30) {
+      return res.status(400).json({ message: "jobDescription must be at least 30 characters" });
+    }
+    if (jobDescription.length > 4000) {
+      return res.status(400).json({ message: "jobDescription must not exceed 4000 characters" });
+    }
+
+    const user = await User.findById(req.user.id)
+      .select("name normalizedSkills resumeNormalizedSkills topDomains githubData resumeData")
+      .lean();
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const analysis = await analyseResumeVsJD(user, jobDescription.trim());
+    return res.json({ analysis });
+  } catch (err) {
+    console.error("Resume improve error:", err.message);
+    const isGroq = err.message.includes("Groq") || err.message.includes("parse");
+    return res.status(isGroq ? 502 : 500).json({ message: err.message || "Analysis failed" });
+  }
+}
+
+module.exports = { uploadResume, downloadResume, improveResume };

@@ -272,6 +272,48 @@ async function getUserPullRequests(username) {
   }
 }
 
+// ── Collaboration data (REST-based) ──────────────────────────────────────────
+
+// Returns { totalPRs, mergedPRs } using the GitHub search API (2 calls).
+// Falls back to { totalPRs: 0, mergedPRs: 0 } if the search API is unavailable.
+async function getUserPRStats(username) {
+  const headers = githubHeaders();
+  try {
+    const [allRes, mergedRes] = await Promise.all([
+      axios.get(
+        `https://api.github.com/search/issues?q=author:${username}+type:pr&per_page=1`,
+        { headers },
+      ),
+      axios.get(
+        `https://api.github.com/search/issues?q=author:${username}+type:pr+is:merged&per_page=1`,
+        { headers },
+      ),
+    ]);
+    return {
+      totalPRs:  allRes.data?.total_count  || 0,
+      mergedPRs: mergedRes.data?.total_count || 0,
+    };
+  } catch {
+    return { totalPRs: 0, mergedPRs: 0 };
+  }
+}
+
+// Returns unique contributor logins on a repo, excluding the owner.
+async function getRepoCollaboratorLogins(owner, repo) {
+  try {
+    const res = await safeGet(
+      `https://api.github.com/repos/${owner}/${repo}/contributors?anon=false&per_page=100`,
+      githubHeaders(),
+    );
+    if (!Array.isArray(res.data)) return [];
+    return res.data
+      .map(c => c.login?.toLowerCase())
+      .filter(login => login && login !== owner.toLowerCase());
+  } catch {
+    return [];
+  }
+}
+
 module.exports = {
   MAX_PAGES,
   ENRICH_LIMIT,
@@ -285,4 +327,6 @@ module.exports = {
   getRateLimit,
   getCollaboratedRepos,
   getUserPullRequests,
+  getUserPRStats,
+  getRepoCollaboratorLogins,
 };

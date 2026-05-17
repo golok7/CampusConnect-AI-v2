@@ -678,6 +678,7 @@ exports.fetchGithubData = async (username) => {
       teamworkScore,
       repoTypeCounts: typeCounts,
       embeddingMode:  embeddingResults ? `semantic+${VOYAGE_MODEL}` : "keyword-only",
+      allRepos,       // raw repo list — used by collaborationService for PR + contributor analysis
       repoDebug:      (isDeepDebug || isDebug) ? Object.values(repoDebug) : [],
       // All scored repos — used to build repoSummaries for domain evidence.
       // Intentionally wider than `repos` (display top-20) so no domain is starved.

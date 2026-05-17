@@ -18,6 +18,7 @@ const pipelineRoutes       = require("./routes/pipeline");
 const interviewRoutes      = require("./routes/interview");
 const driveRoutes          = require("./routes/drive");
 const analyticsRoutes      = require("./routes/analytics");
+const jobRoutes            = require("./routes/jobs");
 // ── App init ───────────────────────────────────────────────────────────────────
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -46,6 +47,7 @@ app.use("/pipeline",    pipelineRoutes);
 app.use("/interview",   interviewRoutes);
 app.use("/drives",      driveRoutes);
 app.use("/analytics",   analyticsRoutes);
+app.use("/jobs",        jobRoutes);
 
 // ── 404 handler ────────────────────────────────────────────────────────────────
 app.use((req, res) => {

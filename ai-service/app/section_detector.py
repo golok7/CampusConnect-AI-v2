@@ -6,7 +6,7 @@ from typing import Literal
 
 SectionType = Literal[
     "summary", "education", "experience", "projects",
-    "skills", "certifications", "achievements", "unstructured"
+    "skills", "certifications", "achievements", "research", "unstructured"
 ]
 
 HEADING_VOCAB: dict[str, SectionType] = {
@@ -53,8 +53,17 @@ HEADING_VOCAB: dict[str, SectionType] = {
     "extracurricular": "achievements",
     "activities": "achievements",
     "co-curricular": "achievements",
-    "publications": "summary",
-    "research": "summary",
+    # Research / publications get their own section for structured extraction
+    "publications": "research",
+    "research": "research",
+    "research experience": "research",
+    "research work": "research",
+    "research papers": "research",
+    "papers": "research",
+    "conference papers": "research",
+    "journal articles": "research",
+    "publications and research": "research",
+    "thesis": "research",
     "languages": "summary",
 }
 

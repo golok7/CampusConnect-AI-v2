@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.cert_parser import CertificationParser
+from app.research_parser import ResearchParser
 from app.confidence_scorer import ConfidenceScorer
 from app.domain_inferrer import DOMAIN_LIST, DomainInferrer
 from app.education_parser import EducationParser
@@ -125,6 +126,14 @@ class TopDomainEntry(BaseModel):
     score: int
 
 
+class ResearchOut(BaseModel):
+    title:      str
+    venue:      str | None = None
+    year:       int | None = None
+    domains:    list[str] = []
+    confidence: float
+
+
 class ConfidenceObject(BaseModel):
     skills: float
     education: float
@@ -145,6 +154,7 @@ class ParseResponse(BaseModel):
     experience: list[ExperienceOut]
     projects: list[ProjectOut]
     certifications: list[CertificationOut]
+    research: list[ResearchOut]
     summary: str
     summarySource: str
     confidence: ConfidenceObject
@@ -265,7 +275,11 @@ async def parse_resume(file: UploadFile):
     cert_parser = CertificationParser()
     cert_entries = cert_parser.parse(sections.get("certifications", []))
 
-    # Domain inference
+    # Parse research / publications
+    research_parser = ResearchParser()
+    research_entries = research_parser.parse(sections.get("research", []))
+
+    # Domain inference — research section boosts domain scores for cold-start users
     inferrer = DomainInferrer(_domain_rules, _overlap_dampening)
     domain_scores = inferrer.infer(sections)
     top_domains = inferrer.top_domains(domain_scores)
@@ -343,6 +357,13 @@ async def parse_resume(file: UploadFile):
             date=e.date,
             confidence=e.confidence,
         ) for e in cert_entries],
+        research=[ResearchOut(
+            title=e.title,
+            venue=e.venue,
+            year=e.year,
+            domains=e.domains,
+            confidence=e.confidence,
+        ) for e in research_entries],
         summary=summary_text,
         summarySource=summary_source,
         confidence=ConfidenceObject(

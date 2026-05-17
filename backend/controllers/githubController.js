@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const { fetchGithubData } = require("../services/githubService");
+const { computeCollaborationData } = require("../services/github/collaborationService");
 const { AI_FAMILY, TOP_N, AI_MAX, DOMAIN_INTEREST_MAP } = require("../constants/domains");
 
 const GITHUB_USERNAME_REGEX = /^[a-zA-Z0-9-]{1,39}$/;
@@ -95,6 +96,18 @@ exports.getGithubData = async (req, res) => {
 
     const repoSummaries = data.repoSummaries || [];
 
+    // ── Collaboration intelligence (non-blocking — runs in parallel with DB write) ──
+    let collaborationData = {};
+    try {
+      collaborationData = await computeCollaborationData(
+        username,
+        data.allRepos || [],
+        data.repoTypeCounts || {},
+      );
+    } catch (collabErr) {
+      console.warn("[github] collaboration scoring failed (non-fatal):", collabErr.message);
+    }
+
     // ── Persist to DB ──
     const user = await User.findByIdAndUpdate(
       req.user.id,
@@ -107,19 +120,20 @@ exports.getGithubData = async (req, res) => {
         interests:       seededInterests,
         activityScore:   data.activityScore,
         githubData: {
-          languages:       data.languages,
-          repos:           data.repos,
-          stars:           data.stars,
-          totalRepos:      data.totalRepos,
-          processedRepos:  data.processedRepos,
-          totalCommits:    data.totalCommits || 0,
-          repoTypeCounts:  data.repoTypeCounts,
+          languages:         data.languages,
+          repos:             data.repos,
+          stars:             data.stars,
+          totalRepos:        data.totalRepos,
+          processedRepos:    data.processedRepos,
+          totalCommits:      data.totalCommits || 0,
+          repoTypeCounts:    data.repoTypeCounts,
           repoSummaries,
           activityScore:   data.activityScore,
-          teamworkScore:   data.teamworkScore || 0,
+          teamworkScore:   collaborationData.teamworkScore || 0,
           scoringMode:     data.embeddingMode,
           semanticVersion: "v1",
           domainScores:    data.skills || {},
+          collaborationData,
         },
       },
       { returnDocument: "after" }
