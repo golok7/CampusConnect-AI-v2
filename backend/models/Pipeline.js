@@ -10,7 +10,7 @@ const pipelineSchema = new mongoose.Schema(
     stage:       { type: String, enum: VALID_STAGES, default: "shortlisted" },
     notes:       { type: String, maxlength: 2000, default: "" },
     // Reference to a specific PlacementDrive (optional to support legacy pipelines without drives)
-    driveId:     { type: String, default: null },
+    driveId:     { type: mongoose.Schema.Types.ObjectId, ref: "Drive", default: null },
     // Snapshot of whyMatched at the time of shortlisting (avoids re-query)
     matchSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
   },

@@ -1,6 +1,6 @@
-const User = require("../models/User");
-const Pipeline = require("../models/Pipeline");
-const MOCK_DRIVES = require("../mocks/placementDrives");
+const User          = require("../models/User");
+const Pipeline      = require("../models/Pipeline");
+const Drive         = require("../models/Drive");
 const MockInterview = require("../models/MockInterview");
 
 // ── GET /analytics/global ──────────────────────────────────────────────────
@@ -60,8 +60,7 @@ exports.getRecruiterAnalytics = async (req, res) => {
       return res.status(403).json({ message: "Access denied" });
     }
 
-    // Find drives owned by recruiter
-    const drives = MOCK_DRIVES.filter(d => d.recruiterId === req.user.id || d.recruiterId === "mock_recruiter");
+    const drives   = await Drive.find({ recruiterId: req.user.id }).lean();
     const driveIds = drives.map(d => d._id);
     
     // Aggregate pipeline stages for these drives

@@ -1,12 +1,12 @@
 const express = require("express");
-const { createDrive, getDrives } = require("../controllers/driveController");
-const { protect } = require("../middleware/authMiddleware");
+const router  = express.Router();
+const auth    = require("../middleware/auth");
+const { createDrive, getDrives, getDrive, updateDrive, closeDrive } = require("../controllers/driveController");
 
-const router = express.Router();
-
-router.use(protect);
-
-router.post("/", createDrive);
-router.get("/", getDrives);
+router.post("/",           auth, createDrive);
+router.get("/",            auth, getDrives);
+router.get("/:id",         auth, getDrive);
+router.patch("/:id",       auth, updateDrive);
+router.patch("/:id/close", auth, closeDrive);
 
 module.exports = router;

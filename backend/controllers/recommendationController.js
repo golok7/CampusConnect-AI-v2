@@ -1,5 +1,5 @@
-const User = require("../models/User");
-const MOCK_DRIVES = require("../mocks/placementDrives");
+const User  = require("../models/User");
+const Drive = require("../models/Drive");
 const { getSimilarUsers, getComplementaryUsers, getJobRecommendations, getRoleMatching } = require("../services/recommendationService");
 
 exports.recommendUsers = async (req, res) => {
@@ -31,7 +31,7 @@ exports.recommendJobs = async (req, res) => {
     const currentUser = await User.findById(req.user.id);
     if (!currentUser) return res.status(404).json({ message: "User not found" });
 
-    const activeDrives = MOCK_DRIVES.filter(d => d.status === "active" && d.type === "job");
+    const activeDrives = await Drive.find({ status: "active", type: "placement" }).lean();
     const recommendations = getJobRecommendations(currentUser, activeDrives);
 
     res.json(recommendations);
@@ -46,7 +46,7 @@ exports.recommendInternships = async (req, res) => {
     const currentUser = await User.findById(req.user.id);
     if (!currentUser) return res.status(404).json({ message: "User not found" });
 
-    const activeDrives = MOCK_DRIVES.filter(d => d.status === "active" && d.type === "internship");
+    const activeDrives = await Drive.find({ status: "active", type: "internship" }).lean();
     const recommendations = getJobRecommendations(currentUser, activeDrives);
 
     res.json(recommendations);
@@ -59,7 +59,7 @@ exports.recommendInternships = async (req, res) => {
 exports.roleMatching = async (req, res) => {
   try {
     const { driveId } = req.params;
-    const drive = MOCK_DRIVES.find(d => d._id === driveId);
+    const drive = await Drive.findById(driveId).lean();
     if (!drive) return res.status(404).json({ message: "Drive not found" });
 
     const candidates = await User.find({ role: "student" }).lean();

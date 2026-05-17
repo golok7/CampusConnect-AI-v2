@@ -1,4 +1,4 @@
-const { getAllRepos, getReadme, getProfileReadme, getDependencies, getContributorCommits, getCollaboratedRepos, getUserPullRequests } = require("./github/githubClient");
+const { getAllRepos, getReadme, getProfileReadme, getDependencies, getContributorCommits, getCollaboratedRepos } = require("./github/githubClient");
 const { repoQualityScore, repoImportanceScore, repoRecencyScore, forkContributionScore, forkTier, forkMultiplier } = require("./scoring/repoScoring");
 const { batchEmbedSummaries } = require("./semantic/voyageClient");
 const { voyageToSemanticPrior, computeEmbeddingConfidence, computePriorEntropy, getKeywordRefinements, applyKeywordRefinements, normalizeDomainProbabilities, applyOverlapDampening } = require("./semantic/semanticPipeline");
@@ -73,11 +73,10 @@ function top5(obj) {
 // ================= MAIN =================
 exports.fetchGithubData = async (username) => {
   try {
-    const [allReposRaw, profileReadme, collabRepos, userPRs] = await Promise.all([
+    const [allReposRaw, profileReadme, collabRepos] = await Promise.all([
       getAllRepos(username),
       getProfileReadme(username),
       getCollaboratedRepos(username),
-      getUserPullRequests(username),
     ]);
 
     const allRepos = [...allReposRaw];
@@ -89,21 +88,12 @@ exports.fetchGithubData = async (username) => {
       }
     }
 
-    let teamworkScore = 0;
-    const prScore = userPRs.length * 2;
-    const collabRepoScore = collabRepos.length * 5;
-    let starBonus = 0;
-    for (const pr of userPRs) {
-      if ((pr.repository?.stargazerCount || 0) > 100) starBonus += 5;
-    }
-    teamworkScore = prScore + collabRepoScore + starBonus;
-
     const repoContributions = {};
     const repoP1Domains     = {};
 
     let skillCounts     = {};
     let forkSkillCounts = {}; // tracks fork-origin contributions for the 35% cap
-    let activityScore  = teamworkScore;
+    let activityScore  = 0;
     let languages      = new Set();
     let totalStars     = 0;
     let processedCount = 0;
