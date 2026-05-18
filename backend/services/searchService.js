@@ -599,3 +599,27 @@ exports.searchUsers = async ({
 
   return response;
 };
+
+// ── Score a single user against a pre-parsed JD ───────────────────────────────
+// parsedJD = { skills: string[], domainRelevance: Record<string,number> }
+// Returns a 0-1 score using the same semantic ranking formula as searchUsers.
+exports.scoreUserAgainstParsedJD = function (user, parsedJD) {
+  const { skills = [], domainRelevance = {} } = parsedJD;
+  const normalizedSkills = skills.map(s => s.toLowerCase());
+
+  // Build activeDomains from just this one user (no pool needed for single-user scoring)
+  const activeDomains = new Set(
+    Object.keys(domainRelevance).filter(d => getDomainScore(user, d) >= DOMAIN_THRESHOLD)
+  );
+
+  const skillInfo    = computeSkillInfo(user, normalizedSkills);
+  const domainScore  = computeSemanticDomainScore(user, domainRelevance, activeDomains);
+  const activityInfo = computeActivityInfo(user);
+  const weights      = pickWeights(normalizedSkills.length > 0, Object.keys(domainRelevance).length > 0);
+
+  return (
+    weights.skill    * skillInfo.score +
+    weights.domain   * domainScore +
+    weights.activity * activityInfo.normalizedActivity
+  );
+};

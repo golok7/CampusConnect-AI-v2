@@ -195,7 +195,7 @@ async function improveResume(req, res) {
     }
 
     const user = await User.findById(req.user.id)
-      .select("name normalizedSkills resumeNormalizedSkills topDomains githubData resumeData")
+      .select("name normalizedSkills resumeNormalizedSkills topDomains domainScores activityScore githubData resumeData")
       .lean();
 
     if (!user) return res.status(404).json({ message: "User not found" });

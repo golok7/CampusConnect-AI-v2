@@ -6,7 +6,7 @@ const { parseJDQuery }  = require("../services/jdQueryParser");
 const VALID_ROLES   = new Set(["student", "faculty", "recruiter"]);
 const VALID_DEBUG   = new Set(["summary", "full", "true"]);
 const DEFAULT_LIMIT = 20;
-const MAX_LIMIT     = 50;
+const MAX_LIMIT     = 500;
 
 // ── GET /search/users ─────────────────────────────────────────────────────────
 // Query params (all optional):

@@ -43,29 +43,39 @@ function buildCandidateSummary(user) {
     ]),
   ];
 
-  const hasGithub = !!(user.githubData?.repoSummaries?.length);
+  const hasGithub = !!(user.githubData?.repoSummaries?.length || user.githubData?.username);
 
   const domains = (user.topDomains || [])
     .map(d => `${d.domain}(${d.score})`)
     .join(", ") || "unknown";
 
-  const repos = hasGithub
+  const repos = hasGithub && user.githubData?.repoSummaries?.length
     ? (user.githubData.repoSummaries)
         .filter(r => r.semanticScore > 0)
         .sort((a, b) => b.semanticScore - a.semanticScore)
-        .slice(0, 4)
-        .map(r => `- ${r.repoName} [${r.dominantDomain}]: ${r.description || "no description"}`)
+        .slice(0, 5)
+        .map(r => `- ${r.repoName} [${r.dominantDomain || "general"}]: ${r.description || "no description"}`)
         .join("\n")
     : null;
 
+  // GitHub activity stats
+  const ghStats = user.githubData?.stats || {};
+  const githubActivity = hasGithub ? [
+    user.githubData.username ? `GitHub: @${user.githubData.username}` : null,
+    ghStats.totalRepos        ? `${ghStats.totalRepos} public repos` : null,
+    ghStats.totalStars        ? `${ghStats.totalStars} total stars` : null,
+    ghStats.totalContributions ? `${ghStats.totalContributions} contributions` : null,
+    user.activityScore        ? `Activity score: ${user.activityScore}/100` : null,
+  ].filter(Boolean).join(" · ") : null;
+
   const projects = (user.resumeData?.projects || [])
     .slice(0, 4)
-    .map(p => `- ${p.name}: ${(p.description || "").slice(0, 100)}`)
+    .map(p => `- ${p.name}: ${(p.description || "").slice(0, 120)}`)
     .join("\n");
 
   const experience = (user.resumeData?.experience || [])
     .slice(0, 3)
-    .map(e => `- ${e.role || "Role"} at ${e.company || "Company"}`)
+    .map(e => `- ${e.role || "Role"} at ${e.company || "Company"}${e.duration ? ` (${e.duration})` : ""}`)
     .join("\n");
 
   const certifications = (user.resumeData?.certifications || [])
@@ -77,7 +87,7 @@ function buildCandidateSummary(user) {
     .map(r => `- "${r.title}" (${r.year || "n.d."})`)
     .join("\n");
 
-  return { skills, domains, repos, projects, experience, certifications, research, hasGithub };
+  return { skills, domains, repos, projects, experience, certifications, research, hasGithub, githubActivity };
 }
 
 // ── Build the project upgrade section for the prompt ─────────────────────────
@@ -94,16 +104,14 @@ function buildUpgradeTargets(repos, projects) {
 async function analyseResumeVsJD(user, jobDescription) {
   const {
     skills, domains, repos, projects,
-    experience, certifications, research, hasGithub,
+    experience, certifications, research, hasGithub, githubActivity,
   } = buildCandidateSummary(user);
 
   const upgradeTargets = buildUpgradeTargets(repos, projects);
 
-  // Explicit fallback instruction when GitHub is absent — prevents LLM from
-  // biasing suggestions toward GitHub activity the student doesn't have.
   const githubSection = hasGithub
-    ? `GitHub repos (top 4 by semantic score):\n${repos}`
-    : `GitHub repos: none — base all project suggestions on resume projects, experience, certifications, and research below. Do NOT suggest "add GitHub projects" as a generic tip.`;
+    ? `GitHub activity: ${githubActivity || "connected"}\nGitHub repos (top 5 by relevance):\n${repos || "No repos analysed yet"}`
+    : `GitHub: not connected — base project suggestions on resume only. Do NOT suggest adding GitHub as a generic tip.`;
 
   const researchSection = research
     ? `Research / publications:\n${research}`
@@ -112,19 +120,23 @@ async function analyseResumeVsJD(user, jobDescription) {
   const raw = await groqChat([
     {
       role: "system",
-      content: `You are a senior career coach and technical resume advisor for campus students.
-Analyse the gap between a student's profile and a target JD. Be specific — reference real project names, real skills, real experience from the profile.
-Return ONLY valid JSON — no markdown, no extra text.`,
+      content: `You are a senior technical recruiter and career coach for campus engineering students.
+Analyse the fit between a student's FULL PROFILE (GitHub + resume combined) and a target job description.
+The overall readiness score must reflect BOTH the GitHub project portfolio AND the resume — not just the resume.
+A strong GitHub with relevant repos should raise the score even if the resume is sparse. Conversely, missing GitHub presence for engineering roles is a gap.
+Be specific — reference real project names, real skills, real repos from the profile. Return ONLY valid JSON, no markdown.`,
     },
     {
       role: "user",
-      content: `Analyse this profile vs the job description and return improvement suggestions.
+      content: `Analyse this full student profile vs the job description.
 
-STUDENT PROFILE:
+═══ STUDENT PROFILE ═══
 Name: ${user.name || "Student"}
-Top domains: ${domains}
-Deduplicated skills (GitHub + resume, top 30): ${skills.slice(0, 30).join(", ")}
+Top technical domains (from GitHub analysis): ${domains}
+Combined skills — GitHub + resume (deduped, top 35): ${skills.slice(0, 35).join(", ")}
+
 ${githubSection}
+
 Resume projects:
 ${projects || "None listed"}
 Work experience:
@@ -132,13 +144,13 @@ ${experience || "None listed"}
 Certifications: ${certifications || "None"}
 ${researchSection}
 
-JOB DESCRIPTION:
-${jobDescription.slice(0, 1800)}
+═══ JOB DESCRIPTION ═══
+${jobDescription.slice(0, 2000)}
 
-EXISTING PROJECTS/REPOS TO CONSIDER FOR UPGRADES:
+═══ EXISTING PROJECTS/REPOS TO CONSIDER FOR UPGRADES ═══
 ${upgradeTargets || "None available"}
 
-Return this exact JSON (keep arrays concise — 3 items max each):
+Return this exact JSON (max 3 items per array):
 {
   "jdSummary": {
     "role": "extracted role title",
@@ -166,12 +178,12 @@ Return this exact JSON (keep arrays concise — 3 items max each):
   ],
   "overallReadiness": {
     "score": 0-100,
-    "summary": "2-sentence honest fit assessment",
+    "summary": "2-sentence honest fit assessment that references both GitHub portfolio strength AND resume qualifications",
     "quickWins": ["2-3 things they can do THIS WEEK to improve their chances"]
   }
 }`,
     },
-  ], { model: GROQ_MODEL, temperature: 0.4, maxTokens: 2000 });
+  ], { model: GROQ_MODEL, temperature: 0.4, maxTokens: 2200 });
 
   return parseGroqJson(raw);
 }

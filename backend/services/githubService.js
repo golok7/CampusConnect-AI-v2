@@ -504,6 +504,7 @@ exports.fetchGithubData = async (username) => {
         };
       } else if (isDebug && repoDebug[repo.name]) {
         const mult = isFork ? forkMultiplier(commits) : null;
+        repoDebug[repo.name].scorePath      = p2Path;
         repoDebug[repo.name].forkTier       = tier;
         repoDebug[repo.name].forkMultiplier = mult !== null ? parseFloat(mult.toFixed(2)) : null;
         repoDebug[repo.name].forkReason     = isFork
@@ -665,7 +666,6 @@ exports.fetchGithubData = async (username) => {
       topDomains,
       domainMetrics,
       activityScore,
-      teamworkScore,
       repoTypeCounts: typeCounts,
       embeddingMode:  embeddingResults ? `semantic+${VOYAGE_MODEL}` : "keyword-only",
       allRepos,       // raw repo list — used by collaborationService for PR + contributor analysis
