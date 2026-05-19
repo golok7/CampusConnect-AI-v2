@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import { userApi, githubApi, recommendApi, leaderboardApi, drivesApi } from "../services/api.js";
@@ -291,6 +291,96 @@ function buildInsights(profile, rank) {
   return ins.slice(0, 4);
 }
 
+// ─── Setup Banner ─────────────────────────────────────────────────────────────
+
+const BANNER_GITHUB = "cc_banner_github_dismissed";
+const BANNER_RESUME = "cc_banner_resume_dismissed";
+
+function SetupBanner({ hasGithub, hasResume }) {
+  const navigate = useNavigate();
+  const [showGithub, setShowGithub] = useState(false);
+  const [showResume, setShowResume] = useState(false);
+
+  useEffect(() => {
+    if (!hasGithub && !sessionStorage.getItem(BANNER_GITHUB)) setShowGithub(true);
+    if (!hasResume  && !sessionStorage.getItem(BANNER_RESUME))  setShowResume(true);
+  }, [hasGithub, hasResume]);
+
+  const dismissGithub = useCallback(() => {
+    sessionStorage.setItem(BANNER_GITHUB, "1");
+    setShowGithub(false);
+  }, []);
+
+  const dismissResume = useCallback(() => {
+    sessionStorage.setItem(BANNER_RESUME, "1");
+    setShowResume(false);
+  }, []);
+
+  const banners = [
+    {
+      show: showGithub,
+      dismiss: dismissGithub,
+      icon: <GithubLogo size={16} weight="fill" />,
+      color: "from-violet-500/10 to-transparent border-violet-500/20",
+      iconColor: "text-violet-400",
+      title: "GitHub not connected",
+      desc: "Connect your GitHub to unlock your AI score, domain profiling, and recruiter visibility.",
+      action: () => { dismissGithub(); navigate("/dashboard"); },
+      actionLabel: "Connect GitHub",
+      actionColor: "bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 border-violet-500/30",
+    },
+    {
+      show: showResume,
+      dismiss: dismissResume,
+      icon: <FileText size={16} weight="fill" />,
+      color: "from-amber-500/10 to-transparent border-amber-500/20",
+      iconColor: "text-amber-400",
+      title: "Resume not uploaded",
+      desc: "Upload your resume so AI can extract your skills, match you to jobs, and suggest improvements.",
+      action: () => { dismissResume(); navigate("/resume"); },
+      actionLabel: "Upload Resume",
+      actionColor: "bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/30",
+    },
+  ];
+
+  return (
+    <div className="space-y-2">
+      <AnimatePresence>
+        {banners.map((b, i) => b.show && (
+          <motion.div
+            key={i}
+            initial={{ opacity: 0, y: -12, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: "auto" }}
+            exit={{ opacity: 0, y: -8, height: 0 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="overflow-hidden"
+          >
+            <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border bg-gradient-to-r ${b.color} backdrop-blur-sm`}>
+              <span className={`shrink-0 ${b.iconColor}`}>{b.icon}</span>
+              <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                <span className="text-xs font-semibold text-zinc-200 shrink-0">{b.title}</span>
+                <span className="text-xs text-zinc-500 truncate">{b.desc}</span>
+              </div>
+              <button
+                onClick={b.action}
+                className={`shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-lg border transition-colors ${b.actionColor}`}
+              >
+                {b.actionLabel}
+              </button>
+              <button
+                onClick={b.dismiss}
+                className="shrink-0 text-zinc-600 hover:text-zinc-400 transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 export default function StudentDashboard() {
@@ -414,6 +504,14 @@ export default function StudentDashboard() {
       </div>
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+
+        {/* ── Setup banners ── */}
+        {!loading && (
+          <SetupBanner
+            hasGithub={!!profile?.githubUsername}
+            hasResume={!!profile?.resumeData?.skills?.length}
+          />
+        )}
 
         {/* ════════════════════════════════════════════════════════
             HERO
