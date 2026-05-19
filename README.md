@@ -2,6 +2,8 @@
 
 > **AI-powered campus placement & recruitment platform** — intelligent resume parsing, semantic job matching, GitHub profiling, mock AI interviews, and a full recruiter pipeline. Built for scale, shipped at hackathon speed.
 
+**Live Demo:** [https://campusconnect-frontend-sooty.vercel.app](https://campusconnect-frontend-sooty.vercel.app)
+
 ---
 
 ## Table of Contents
