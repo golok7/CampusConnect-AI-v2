@@ -62,7 +62,7 @@ export const resumeApi = {
   upload: async (file) => {
     const form = new FormData();
     form.append("resume", file);
-    const res = await fetch("/resume/upload", {
+    const res = await fetch(`${BASE}/resume/upload`, {
       method: "POST",
       headers: { Authorization: `Bearer ${getToken()}` },
       body: form,
@@ -73,7 +73,7 @@ export const resumeApi = {
   improve: (jobDescription) =>
     apiFetch("/resume/improve", { method: "POST", body: JSON.stringify({ jobDescription }) }),
   download: async (githubUsername) => {
-    const res = await fetch(`/resume/download/${githubUsername}`, {
+    const res = await fetch(`${BASE}/resume/download/${githubUsername}`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     });
     if (!res.ok) throw new Error("Resume not available");
