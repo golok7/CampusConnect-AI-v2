@@ -38,7 +38,7 @@ function Layout({ children }) {
 
 function RootRedirect() {
   const { isAuth, user } = useAuth();
-  if (!isAuth) return <Navigate to="/login" replace />;
+  if (!isAuth) return <Navigate to="/register" replace />;
   return <Navigate to={user?.role === "recruiter" ? "/recruiter" : "/dashboard"} replace />;
 }
 
