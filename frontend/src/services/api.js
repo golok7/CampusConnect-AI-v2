@@ -1,4 +1,4 @@
-const BASE = "";
+const BASE = import.meta.env.VITE_API_URL || "";
 
 function getToken() {
   return localStorage.getItem("cc_token") || "";
