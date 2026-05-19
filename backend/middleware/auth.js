@@ -24,6 +24,13 @@ module.exports = (req, res, next) => {
     // Uses env secret — never a hardcoded string
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+    // Validate that the user ID inside the token is a valid MongoDB ObjectId.
+    // This prevents CastErrors when processing requests from clients with stale/mock tokens (e.g. { id: 1 }).
+    const mongoose = require("mongoose");
+    if (decoded && decoded.id && !mongoose.Types.ObjectId.isValid(decoded.id)) {
+      return res.status(401).json({ message: "Invalid token payload: malformed user ID" });
+    }
+
     req.user = decoded;
     next();
 

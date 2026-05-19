@@ -16,6 +16,14 @@ async function apiFetch(path, options = {}) {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
+    
+    // Auto-logout if token is rejected (e.g. invalid, malformed, or expired)
+    if (res.status === 401) {
+      localStorage.removeItem("cc_token");
+      // Force reload to let AuthContext sync state and redirect to login
+      window.location.href = "/";
+    }
+
     throw Object.assign(new Error(body.message || "Request failed"), { status: res.status });
   }
 

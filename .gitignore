@@ -3,3 +3,12 @@ cache/
 node_modules/
 .env
 backend/.env
+#IDE
+.venv/
+.vscode/
+.idea/
+
+# Cache
+.pytest_cache/
+__pycache__/
+*.pyc
