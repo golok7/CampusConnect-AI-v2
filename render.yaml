@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: ai-service
+    runtime: docker
+    dockerfilePath: ai-service/Dockerfile
+    dockerContext: ai-service
+    envVars:
+      - key: NODE_BACKEND_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+
+  - type: web
+    name: backend
+    runtime: docker
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    envVars:
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: VOYAGE_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: RESUME_PARSER_URL
+        sync: false
+      - key: PORT
+        value: 5000
