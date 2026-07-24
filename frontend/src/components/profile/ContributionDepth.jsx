@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { memo } from "react";
 
 function Stat({ value, label }) {
   return (
@@ -11,7 +12,7 @@ function Stat({ value, label }) {
   );
 }
 
-export default function ContributionDepth({ contributionStats }) {
+export default memo(function ContributionDepth({ contributionStats }) {
   if (!contributionStats) return null;
 
   const {
@@ -55,4 +56,4 @@ export default function ContributionDepth({ contributionStats }) {
       </div>
     </motion.section>
   );
-}
+});

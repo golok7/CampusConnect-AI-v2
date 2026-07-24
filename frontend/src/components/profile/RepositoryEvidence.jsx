@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { memo } from "react";
 import { getDomainConfig } from "../../constants/domains.js";
 
 function RepoCard({ repo, index }) {
@@ -40,7 +41,7 @@ function RepoCard({ repo, index }) {
   );
 }
 
-export default function RepositoryEvidence({ topRepos = [] }) {
+export default memo(function RepositoryEvidence({ topRepos = [] }) {
   if (!topRepos.length) return null;
 
   return (
@@ -59,4 +60,4 @@ export default function RepositoryEvidence({ topRepos = [] }) {
       </div>
     </section>
   );
-}
+});

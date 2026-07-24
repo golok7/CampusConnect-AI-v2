@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { getDomainConfig } from "../../constants/domains.js";
 import { resumeApi } from "../../services/api.js";
@@ -59,7 +60,7 @@ function DownloadResumeButton({ githubUsername }) {
   );
 }
 
-export default function ProfileHero({ profile }) {
+export default memo(function ProfileHero({ profile }) {
   const {
     name,
     githubUsername,
@@ -183,4 +184,4 @@ export default function ProfileHero({ profile }) {
       </motion.div>
     </div>
   );
-}
+});

@@ -13,6 +13,22 @@ const ENRICH_LIMIT          = 30;
 const PHASE1_FALLBACK_SCALE = 0.25;
 const TOP_DOMAIN_MIN_RATIO  = 0.05; // domains scoring below 5% of top are noise, not specialization
 const VOYAGE_MODEL          = "voyage-4-lite"; // keep for embeddingMode label
+const MAX_REPOS_TO_PROCESS  = 50; // Limit repos processed to prevent overload
+
+// Simple cache for GitHub API responses (5-minute TTL)
+const githubCache = new Map();
+const CACHE_TTL = 1000 * 60 * 5; // 5 minutes
+
+// Helper function to get cached data or fetch fresh
+const getCachedData = async (cacheKey, fetchFn) => {
+  const cached = githubCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+  const data = await fetchFn();
+  githubCache.set(cacheKey, { data, timestamp: Date.now() });
+  return data;
+};
 
 // ================= HELPERS =================
 
@@ -74,16 +90,21 @@ function top5(obj) {
 exports.fetchGithubData = async (username) => {
   try {
     const [allReposRaw, profileReadme, collabRepos] = await Promise.all([
-      getAllRepos(username),
-      getProfileReadme(username),
-      getCollaboratedRepos(username),
+      getCachedData(`${username}_repos`, () => getAllRepos(username)),
+      getCachedData(`${username}_profile_readme`, () => getProfileReadme(username)),
+      getCachedData(`${username}_collab_repos`, () => getCollaboratedRepos(username)),
     ]);
 
     const allRepos = [...allReposRaw];
-    const allRepoNames = new Set(allRepos.map(r => r.full_name));
+    // Limit to most recently updated repositories to prevent overload
+    const sortedRepos = allRepos
+      .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+      .slice(0, MAX_REPOS_TO_PROCESS);
+    
+    const allRepoNames = new Set(sortedRepos.map(r => r.full_name));
     for (const repo of collabRepos) {
       if (!allRepoNames.has(repo.full_name)) {
-        allRepos.push(repo);
+        sortedRepos.push(repo);
         allRepoNames.add(repo.full_name);
       }
     }
@@ -111,7 +132,7 @@ exports.fetchGithubData = async (username) => {
     };
 
     // ── Phase 1: score ALL repos using metadata only ──
-    for (const repo of allRepos) {
+    for (const repo of sortedRepos) {
       const cls      = getCls(repo);
       const { type } = cls;
       const weight   = getRepoWeight(type);
@@ -142,7 +163,7 @@ exports.fetchGithubData = async (username) => {
     // ── Phase 2: README + deps + Voyage AI embeddings ──
     // Fork inclusion: ANY of description/topics, recent activity, non-trivial size, or community.
     // Commit depth is unknown here (fetched in 2a) — metadata proxies decide the gate.
-    const enrichCandidates = [...allRepos]
+    const enrichCandidates = [...sortedRepos]
       .filter(r => {
         const { type } = getCls(r);
         if (["project", "dsa", "course"].includes(type)) return true;
@@ -518,7 +539,7 @@ exports.fetchGithubData = async (username) => {
     // Repos outside the Phase 2 enrichment window apply Phase 1 keyword hints at reduced scale.
     const enrichedRepoNames = new Set(enriched.map(e => e.repo.name));
 
-    for (const repo of allRepos) {
+    for (const repo of sortedRepos) {
       if (enrichedRepoNames.has(repo.name)) continue;
 
       const { type } = getCls(repo);
@@ -573,18 +594,18 @@ exports.fetchGithubData = async (username) => {
     const qualifiedSorted = sorted.filter(([, score]) => score >= topScore * TOP_DOMAIN_MIN_RATIO);
     const topDomains      = qualifiedSorted.slice(0, 5).map(([d]) => d);
 
-    // ── Per-domain metrics (repos / commits / stars per top domain) ──
+// ── Per-domain metrics (repos / commits / stars per top domain) ──
     const domainMetrics = {};
     for (const domain of topDomains) {
       let dRepos = 0, dCommits = 0, dStars = 0;
-      for (const repo of allRepos) {
+      for (const repo of sortedRepos) {
         const contrib = repoContributions[repo.name] || {};
         if ((contrib[domain] || 0) > 0) {
           dRepos++;
           dCommits += commitCounts.get(repo.name) || 0;
           dStars   += repo.stargazers_count || 0;
-        }
-      }
+}
+   }
       domainMetrics[domain] = { repos: dRepos, commits: dCommits, stars: dStars, activeDays: 0 };
     }
 
@@ -592,7 +613,7 @@ exports.fetchGithubData = async (username) => {
     const totalCommits = [...commitCounts.values()].reduce((s, v) => s + v, 0);
 
     // One compact final summary per fetch
-    console.log(`[github] fetch complete — ${allRepos.length} repos, top domains: [${topDomains.join(", ")}], totalCommits: ${totalCommits}, activity: ${activityScore.toFixed(2)}`);
+    console.log(`[github] fetch complete — ${sortedRepos.length} repos, top domains: [${topDomains.join(", ")}], totalCommits: ${totalCommits}, activity: ${activityScore.toFixed(2)}`);
 
     // ── Aggregate raw skills ──────────────────────────────────────────────────
     // Sources (descending reliability):
@@ -655,25 +676,25 @@ exports.fetchGithubData = async (username) => {
       tools:      [...rawSkillSets.tools],
     };
 
-    return {
-      languages:      Array.from(languages),
-      totalRepos:     allRepos.length,
-      processedRepos: processedCount,
-      stars:          totalStars,
-      totalCommits,
-      skills:         skillCounts,
-      rawSkills,
-      topDomains,
-      domainMetrics,
-      activityScore,
-      repoTypeCounts: typeCounts,
-      embeddingMode:  embeddingResults ? `semantic+${VOYAGE_MODEL}` : "keyword-only",
-      allRepos,       // raw repo list — used by collaborationService for PR + contributor analysis
-      repoDebug:      (isDeepDebug || isDebug) ? Object.values(repoDebug) : [],
-      // All scored repos — used to build repoSummaries for domain evidence.
-      // Intentionally wider than `repos` (display top-20) so no domain is starved.
-      repoSummaries: allRepos
-        .map(r => {
+return {
+       languages:      Array.from(languages),
+       totalRepos:     sortedRepos.length,
+       processedRepos: processedCount,
+       stars:          totalStars,
+       totalCommits,
+       skills:         skillCounts,
+       rawSkills,
+       topDomains,
+       domainMetrics,
+       activityScore,
+       repoTypeCounts: typeCounts,
+       embeddingMode:  embeddingResults ? `semantic+${VOYAGE_MODEL}` : "keyword-only",
+       allRepos,       // raw repo list — used by collaborationService for PR + contributor analysis
+       repoDebug:      (isDeepDebug || isDebug) ? Object.values(repoDebug) : [],
+// All scored repos — used to build repoSummaries for domain evidence.
+// Intentionally wider than `repos` (display top-20) so no domain is starved.
+       repoSummaries: sortedRepos
+         .map(r => {
           const contrib  = repoContributions[r.name] || {};
           const topEntry = Object.entries(contrib).sort((a, b) => b[1] - a[1])[0];
           if (!topEntry) return null;
@@ -696,7 +717,7 @@ exports.fetchGithubData = async (username) => {
           };
         })
         .filter(Boolean),
-      repos: [...allRepos]
+      repos: [...sortedRepos]
         .filter(r => {
           const cls     = getCls(r);
           const commits = commitCounts.get(r.name) || 0;

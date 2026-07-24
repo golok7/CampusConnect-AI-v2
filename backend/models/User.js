@@ -42,7 +42,7 @@ const userSchema = new mongoose.Schema({
   // Human-readable labels derived from topDomains (e.g. "Machine Learning")
   interests: [String],
 
-  githubUsername: String,
+  githubUsername: { type: String, index: true },
 
   // ── Semantic domain intelligence ─────────────────────────────────────────────
   // Top 5 contribution-weighted semantic domains.

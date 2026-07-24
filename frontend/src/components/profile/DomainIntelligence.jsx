@@ -1,7 +1,8 @@
 import { motion } from "framer-motion";
+import { memo } from "react";
 import DomainCard from "./DomainCard.jsx";
 
-export default function DomainIntelligence({ profile }) {
+export default memo(function DomainIntelligence({ profile }) {
   const { domainEvidence, normalizedSkills = [], githubUsername } = profile;
 
   if (!domainEvidence) return null;
@@ -42,4 +43,4 @@ export default function DomainIntelligence({ profile }) {
       </div>
     </section>
   );
-}
+});

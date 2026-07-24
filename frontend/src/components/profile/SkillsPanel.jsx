@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 function PrimaryChip({ skill }) {
@@ -28,7 +29,7 @@ function CategorySection({ label, skills }) {
   );
 }
 
-export default function SkillsPanel({ skillEvidence }) {
+export default memo(function SkillsPanel({ skillEvidence }) {
   const [expanded, setExpanded] = useState(false);
 
   if (!skillEvidence) return null;
@@ -84,4 +85,4 @@ export default function SkillsPanel({ skillEvidence }) {
       </AnimatePresence>
     </motion.section>
   );
-}
+});

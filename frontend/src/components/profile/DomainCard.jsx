@@ -1,4 +1,5 @@
 import { getDomainConfig, getRelevantSkills } from "../../constants/domains.js";
+import { memo } from "react";
 
 function RepoRow({ name, githubUsername }) {
   const url = githubUsername
@@ -20,7 +21,7 @@ function RepoRow({ name, githubUsername }) {
   );
 }
 
-export default function DomainCard({ domain, topRepos = [], normalizedSkills = [], topDomainData, githubUsername }) {
+export default memo(function DomainCard({ domain, topRepos = [], normalizedSkills = [], topDomainData, githubUsername }) {
   const cfg            = getDomainConfig(domain);
   const relevantSkills = getRelevantSkills(domain, normalizedSkills);
   const metrics        = topDomainData?.metrics;
@@ -72,4 +73,4 @@ export default function DomainCard({ domain, topRepos = [], normalizedSkills = [
       </div>
     </div>
   );
-}
+});
