@@ -230,6 +230,12 @@ export default function MockInterviewPage() {
     setQuestion(result);
     setPhase("interview");
     if (voiceMode) speak(result.question);
+  } catch (err) {
+    if (err.status === 401) {
+      setError("Your session expired. Please log in again.");
+    } else {
+      setError(err.message || "Failed to start interview");
+    }
   }
 
   async function handleSubmit() {
@@ -250,7 +256,12 @@ export default function MockInterviewPage() {
         if (voiceMode) speak(result.question);
       }
     } catch (err) {
-      setError(err.message || "Failed to submit answer");
+      // Handle token expiry during interview - don't auto-redirect
+      if (err.status === 401) {
+        setError("Your session expired. Please log in again and restart the interview.");
+      } else {
+        setError(err.message || "Failed to submit answer");
+      }
     } finally {
       setSubmit(false);
     }

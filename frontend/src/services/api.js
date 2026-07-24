@@ -18,15 +18,17 @@ async function apiFetch(path, options = {}) {
     const body = await res.json().catch(() => ({}));
     
     // Auto-logout if token is rejected (e.g. invalid, malformed, or expired)
-    // BUT do NOT auto-logout for GitHub token errors (401 from github endpoints)
-    // as these are about GitHub token validity, not user session validity
+    // BUT do NOT auto-logout for:
+    // 1. GitHub token errors (401 from github endpoints) - GitHub token validity, not user session
+    // 2. Interview endpoints - token may expire mid-interview; redirect loses all state
     const isGithubEndpoint = path.startsWith("/github/");
+    const isInterviewEndpoint = path.startsWith("/interview/");
     const isGitHubTokenError = 
       res.status === 401 && 
       isGithubEndpoint && 
       (body.message || "").includes("GitHub token is");
     
-    if (res.status === 401 && !isGitHubTokenError) {
+    if (res.status === 401 && !isGitHubTokenError && !isInterviewEndpoint) {
       localStorage.removeItem("cc_token");
       // Force reload to let AuthContext sync state and redirect to login
       window.location.href = "/";
