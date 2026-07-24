@@ -19,7 +19,7 @@ const { DOMAIN_INTEREST_MAP } = require("../constants/domains");
 //   query absent    → structured domain scoring within that pool
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SEARCH_DEFAULTS      = { limit: 20, MAX_LIMIT: 50 };
+const SEARCH_DEFAULTS      = { limit: 20, MAX_LIMIT: 500 };
 const DOMAIN_THRESHOLD     = 5;
 const TOP_DOMAIN_MIN_RATIO = 0.05;
 
