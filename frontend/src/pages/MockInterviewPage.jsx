@@ -221,20 +221,22 @@ export default function MockInterviewPage() {
   }
 
   async function handleStart({ jd, totalQuestions, candidateId }) {
-    const result = await interviewApi.start({
-      candidateId: candidateId || user?.id,
-      jobDescription: jd,
-      totalQuestions,
-    });
-    setSessionId(result.sessionId);
-    setQuestion(result);
-    setPhase("interview");
-    if (voiceMode) speak(result.question);
-  } catch (err) {
-    if (err.status === 401) {
-      setError("Your session expired. Please log in again.");
-    } else {
-      setError(err.message || "Failed to start interview");
+    try {
+      const result = await interviewApi.start({
+        candidateId: candidateId || user?.id,
+        jobDescription: jd,
+        totalQuestions,
+      });
+      setSessionId(result.sessionId);
+      setQuestion(result);
+      setPhase("interview");
+      if (voiceMode) speak(result.question);
+    } catch (err) {
+      if (err.status === 401) {
+        setError("Your session expired. Please log in again.");
+      } else {
+        setError(err.message || "Failed to start interview");
+      }
     }
   }
 
