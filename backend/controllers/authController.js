@@ -78,3 +78,20 @@ exports.login = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+// Demo mode: returns a token for a shared read-only-ish recruiter account so the
+// public link works without sign-in. Disabled when DEMO_MODE=false.
+exports.demo = async (req, res) => {
+  try {
+    const email = "demo.recruiter@campusconnect.ai";
+    let user = await User.findOne({ email });
+    if (!user) {
+      const hashed = await bcrypt.hash(require("crypto").randomBytes(24).toString("hex"), 10);
+      user = await User.create({ name: "Demo Recruiter", email, password: hashed, role: "recruiter" });
+    }
+    const token = jwt.sign({ id: user._id, role: "recruiter" }, process.env.JWT_SECRET, { expiresIn: "7d" });
+    res.json({ token, user: { id: user._id, role: "recruiter", name: user.name } });
+  } catch (err) {
+    console.error("Demo login error:", err.message);
+    res.status(500).json({ message: "Server error" });
+  }
+};

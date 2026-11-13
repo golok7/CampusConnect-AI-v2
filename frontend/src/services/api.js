@@ -31,6 +31,7 @@ async function apiFetch(path, options = {}) {
     if (res.status === 401 && !isGitHubTokenError && !isInterviewEndpoint) {
       localStorage.removeItem("cc_token");
       // Force reload to let AuthContext sync state and redirect to login
+      // In demo mode AuthContext fetches a fresh demo token on reload.
       window.location.href = "/";
     }
 

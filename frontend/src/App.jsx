@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "./contexts/AuthContext.jsx";
+import { useAuth, DEMO_MODE } from "./contexts/AuthContext.jsx";
 import Navbar from "./components/layout/Navbar.jsx";
 import ProtectedRoute from "./components/layout/ProtectedRoute.jsx";
 
@@ -74,8 +74,9 @@ export default function App() {
     <Layout>
       <Routes>
         {/* Public */}
-        <Route path="/login"    element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
+        {/* Sign-in disabled in demo mode: send /login and /register to the recruiter view */}
+        <Route path="/login"    element={DEMO_MODE ? <Navigate to="/" replace /> : <LoginPage />} />
+        <Route path="/register" element={DEMO_MODE ? <Navigate to="/" replace /> : <RegisterPage />} />
 
         {/* Root → role-based redirect */}
         <Route path="/" element={<RootRedirect />} />
