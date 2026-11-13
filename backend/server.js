@@ -65,12 +65,23 @@ app.use((err, req, res, next) => {  // eslint-disable-line no-unused-vars
 // ── Connect to DB, then start server ──────────────────────────────────────────
 mongoose.set("strictQuery", true);
 
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => {
+// Listen immediately so Render's port check passes and the service never
+// crash-loops; connect to MongoDB with retries in the background.
+app.listen(PORT, "0.0.0.0", () => console.log(`Server running on port ${PORT}`));
+
+async function connectDB(attempt = 1) {
+  if (!process.env.MONGO_URI) {
+    console.error("MONGO_URI is not set in the environment");
+    return;
+  }
+  try {
+    await mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 15000 });
     console.log("DB connected");
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-  })
-  .catch(err => {
-    console.error("DB connection failed:", err.message);
-    process.exit(1);
-  });
+  } catch (err) {
+    console.error(`DB connection failed (attempt ${attempt}):`, err.message);
+    setTimeout(() => connectDB(attempt + 1), Math.min(30000, attempt * 5000));
+  }
+}
+connectDB();
+
+process.on("unhandledRejection", err => console.error("Unhandled rejection:", err));
